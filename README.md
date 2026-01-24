@@ -96,7 +96,10 @@ python benchmark_strategies.py --all --timeout 60 --sizes 5 10 15 --instances 5
 ### 3. Generate Plots
 Generate performance visualizations from benchmark results:
 ```bash
-python plot.py
+python plot.py <path_to_csv>
+
+# Example:
+python plot.py results/2026-01-24_14-30-45/summary_2026-01-24_14-30-45.csv
 ```
 
 #### Generated Charts (11 total)
@@ -128,17 +131,21 @@ The efficiency of this project relies on three pillars of Constraint Programming
 ## 📊 Output Structure
 
 ```
-result_benchmark_strategies/
-├── summary_results.csv          # All results in CSV format
-├── 01_Default_Restart/          # Results for each strategy
-│   ├── result_01_N5.txt
-│   ├── result_02_N5.txt
+results/
+├── 2026-01-24_14-30-45/             # Timestamped run folder
+│   ├── summary_2026-01-24_14-30-45.csv  # Results in CSV format
+│   ├── 01_Default_Restart/          # Results for each strategy
+│   │   ├── result_01_N5.txt
+│   │   ├── result_02_N5.txt
+│   │   └── ...
+│   ├── 02_Moves_FirstFail/
 │   └── ...
-├── 02_Moves_FirstFail/
-└── ...
+└── 2026-01-24_15-00-00/             # Another run...
 
-grafici_progetto/
-├── 01_tempo_vs_n.png
-├── 02_successo_vs_n.png
-└── ...
+graphs/
+├── summary_2026-01-24_14-30-45/     # Graphs for specific CSV
+│   ├── 01_line_comparison_by_size.png
+│   ├── 02_success_by_size.png
+│   └── ...
+└── summary_2026-01-24_15-00-00/
 ```
