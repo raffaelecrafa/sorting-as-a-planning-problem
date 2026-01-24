@@ -1,0 +1,17 @@
+\section{The Adaptive Model: \texttt{sorting\_template.mzn}}
+\subsection{Structural Identity}
+\texttt{sorting\_template.mzn} shares the exact same logical constraints as the base model (\texttt{inverse}, \texttt{parity}, \texttt{group theory swaps}). This ensures that any performance difference observed during benchmarking is strictly attributed to the search strategy and not to model discrepancies.
+
+\subsection{Architectural Differences}
+The template introduces two key changes for meta-programming:
+\begin{enumerate}
+    \item \textbf{Decision Array Aggregation:} 
+    \begin{lstlisting}[language=C]
+    array[1..2*k] of var 1..n: all_moves = [
+        if i mod 2 == 1 then idx1[i div 2] else idx2[(i-1) div 2] endif | i in 1..2*k
+    ];
+    \end{lstlisting}
+    Search heuristics like \textit{FirstFail} require a single array. By interleaving \texttt{idx1} and \texttt{idx2}, we force the solver to decide a complete move $(idx1_t, idx2_t)$ before moving to $t+1$, preventing incoherent branching.
+    
+    \item \textbf{Heuristic Injection:} The \texttt{solve} command is replaced by the \texttt{\{\{SOLVE\_STRATEGY\}\}} placeholder, allowing the Python script to inject annotations like \texttt{dom\_w\_deg} dynamically.
+\end{enumerate}

@@ -1,0 +1,17 @@
+\section{Introduction}
+his project addresses the "Sorting as a Planning Problem". The objective is to find the \textbf{minimum length plan} (sequence of actions) required to sort a vector of integers $\vec{v}$ using only pairwise swaps. The problem is modeled as a Constraint Satisfaction Problem (CSP) where the solver must determine the optimal sequence of $k$ moves to transition from an initial unsorted state to a sorted goal state.
+
+To achieve this, a hybrid architecture was developed using \textbf{MiniZinc} for the logical modeling of constraints and \textbf{Python} as a meta-solver to handle the dynamic optimization of the plan length.
+
+The project is structured as follows.
+
+\subsection{Project Structure}
+he project implementation is distributed across four distinct files, each serving a specific role in the solution architecture:
+\begin{enumerate}
+    \item \textbf{\texttt{sorting.mzn}}: The core CSP model of the project. It defines the problem in terms of variables and mathematical constraints for a fixed time horizon k. It describes the state of the vector $\vec{v}$ at each instant $t$ (from $0$ to $k$) and the rules for switching from one state to another via \textit{swaps}.
+    \item \textbf{\texttt{benchmark.py}}: A Python script acting as a meta-solver. This script creates all the benchmarks and implements an \textit{Iterative Deepening} loop, incrementing the plan length $k$ until a valid solution is found.
+    \item \textbf{\texttt{sorting\_template.mzn}}: A parameterized version of the base model \texttt{sorting.mzn} that enables the dynamic injection of search strategies.
+    \item \textbf{\texttt{benchmark\_strategies.py}}: The experimental suite used to compare different search heuristics and measure their impact on the solver's performance for complex instances.
+    \item \textbf{\texttt{plot.py}}: A script that shows a graphical display of the results
+\end{enumerate}
+

@@ -1,0 +1,15 @@
+\section{The Benchmark Engine: \texttt{benchmark.py}}
+MiniZinc cannot optimize the size of the transition matrix dynamically. \texttt{benchmark.py} acts as a meta-solver implementing \textbf{Iterative Deepening}.
+
+\subsection{Iterative Search and Timeout}
+\begin{lstlisting}[language=Python]
+while not found:
+    instance = minizinc.Instance(solver, model)
+    instance["k"] = k
+    result = instance.solve(timeout=timedelta(seconds=TIMEOUT_SEC))
+    if result.status == minizinc.Status.SATISFIED:
+        return k, result
+    elif result.status == minizinc.Status.UNSATISFIABLE:
+        k += 1
+\end{lstlisting}
+\textbf{Explanation:} The script tests $k=1, 2, \dots$ sequentially. Since our model is optimal-length-constrained, the first $k$ that returns SATISFIED is mathematically the minimum plan length. A cumulative timeout of 300s is enforced to handle NP-hard instances.

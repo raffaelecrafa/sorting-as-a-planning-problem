@@ -1,0 +1,74 @@
+\documentclass[a4paper,12pt]{article}
+
+% --- PACKAGES ---
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{caption}
+
+% --- MARGIN SETTINGS ---
+\geometry{left=25mm, right=25mm, top=25mm, bottom=25mm}
+
+% --- CODE STYLE ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,                                  
+    captionpos=b,                    
+    keepspaces=true,                                  
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% --- HEADER ---
+\title{
+    \vspace{2cm}
+    \textbf{\Huge Project 5: Sorting as a Planning Problem} \\
+    \vspace{1cm}
+    \Large Master's Degree in Computer Science \\
+    \vspace{0.5cm}
+    \large Constraint Programming Course - Technical Report
+}
+\author{\textbf{Raffaele Crafa} \\ Student ID: 123456}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\newpage
+\tableofcontents
+\newpage
+
+% --- CHAPTERS ---
+\input{sec1_intro}
+\input{sec2_modeling}
+\input{sec3_engine}
+\input{sec4_adaptive}
+\input{sec5_advanced}
+\input{sec6_results}
+\input{sec7_conclusions}
+
+\end{document}

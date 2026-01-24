@@ -1,0 +1,73 @@
+\section{Problem Modeling: \texttt{sorting.mzn}} The core logical model is implemented in \texttt{sorting.mzn}. The problem is framed as a discrete-time state-transition system where a vector v of size n must be transformed into a sorted configuration within exactly k steps. To ensure the solver can handle high-dimensional instances (N=30), the model integrates advanced propagation techniques and mathematical properties of permutations.
+
+\subsection{Parameters and Decision Variables} A rigorous definition of the search space is provided through the following parameters and variables:
+
+\begin{lstlisting}[language=C] int: n;
+
+array[1..n] of int: start_v; int: k;
+
+\end{lstlisting} 
+The parameters \texttt{n} and \texttt{start\_v} define the instance size and the initial unsorted state. The parameter \texttt{k} represents the fixed planning horizon. In our architecture, \texttt{k} is controlled by the Python meta-solver to find the minimum plan length.
+
+\begin{lstlisting}[language=C] 
+array[0..k, 1..n] of var 1..n: v; 
+array[0..k, 1..n] of var 1..n: pos; 
+\end{lstlisting} 
+We declare two 2D matrices to represent the state of the system at each time step $t \in [0,k]$. 
+\begin{itemize} 
+    \item \texttt{v[t,p]}: The value contained in position p at time t. \item \texttt{pos[t,i]}: The position of value i at time t.
+\end{itemize} 
+\textbf{Motivation:} This is a \textbf{Dual Modeling} approach (also known as \textbf{Channeling}). By representing the same state in two ways, the solver can propagate information bidirectionally. For example, assigning a value to a position in \texttt{v} immediately restricts the domain of the corresponding entry in \texttt{pos}. In this way we are combining two points of view.
+
+\begin{lstlisting}[language=C] 
+array[0..k-1] of var 1..n: idx1; 
+array[0..k-1] of var 1..n: idx2; 
+\end{lstlisting} 
+These are the action variables. For each transition from t to t+1, the solver must decide the pair of indices ($idx1_t$,$idx2_t$) to be swapped.
+
+\subsection{Initial, Goal, and Parity Constraints} The boundary conditions and mathematical invariants of the problem are enforced here:
+
+\begin{lstlisting}[language=C] 
+constraint forall(p in 1..n) (v[0, p] = start_v[p]); 
+constraint forall(p in 1..n-1) (v[k, p] <= v[k, p+1]); 
+\end{lstlisting} 
+The first constraint initializes the state at t=0 using the input data. The second constraint defines the \textbf{Goal State}: at time t=k, the vector must be sorted in non-descending order.
+
+\begin{lstlisting}[language=C] 
+int: initial_inv = sum(i, j in 1..n where i < j)(bool2int(start_v[i] > start_v[j])); 
+constraint (k mod 2) == (initial_inv mod 2); 
+\end{lstlisting} 
+This constraint calculates the number of inversions in the initial permutation. That's because, in Group Theory, every swap (transposition) changes the parity of a permutation. Therefore, if the initial state requires an odd number of swaps to be reached, any even $k$ is mathematically impossible (and viceversa, if we have an even number of swaps to do, any odd $k$ is mathematically impossible). By enforcing this \textbf{Parity Invariant}, the solver can return \texttt{UNSAT} for half of the iterative deepening steps during the flattening phase, significantly reducing the total benchmarking time.
+
+\subsection{Channeling and Global Propagation} To maximize the inferential power of the solver, we link the dual representations:
+
+\begin{lstlisting}[language=C] 
+constraint forall(t in 0..k) ( 
+    inverse([v[t, p] | p in 1..n], [pos[t, i] | i in 1..n]) /\
+    alldifferent([v[t, p] | p in 1..n]) :: domain 
+); 
+\end{lstlisting} 
+The \texttt{inverse} global constraint ensures that $v[t,p]=i\iff pos[t,i]=p$. We are enforcing \textbf{Generalized Arc Consistency (GAC)} via \texttt{:: domain} on the \texttt{alldifferent} constraint, that is much more powerful than simple binary decomposition. Combined with channeling, it allows Gecode to detect conflicts by looking at the "available slots" for values, pruning entire branches of the search tree before any value is assigned.
+
+\subsection{Transition Logic and Optimal Search Pruning} 
+This section defines the physics of the environment and applies aggressive pruning based on the properties of minimal plans.
+
+\begin{lstlisting}[language=C] 
+constraint forall(t in 0..k-1) ( 
+    idx1[t] < idx2[t] /\
+    
+    % In un piano ottimo, ogni scambio sistema almeno un elemento
+    (v[t, idx2[t]] = idx1[t] \/ v[t, idx1[t]] = idx2[t]) /\
+    
+    v[t+1, idx1[t]] = v[t, idx2[t]] /\
+    v[t+1, idx2[t]] = v[t, idx1[t]] /\
+    forall(p in 1..n where p != idx1[t] /\ p != idx2[t]) (
+        v[t+1, p] = v[t, p]
+    )
+); 
+\end{lstlisting} 
+\textbf{Detailed Analysis:} \begin{enumerate} \item \textbf{Canonical Representation:} \texttt{idx1[t] < idx2[t]} prevents the solver from considering swap(2,1) as different from swap(1,2), halving the branching factor. \item \textbf{Optimal Swap Property:} The constraint \texttt{(v[t, idx2[t]] = idx1[t] / v[t, idx1[t]] = idx2[t])} is the most significant optimization. \textbf{Motivation:} In a minimum-length plan for the sorting problem, it is never optimal to make a swap that doesn't put at least one element into its correct final position. This \textbf{Local Optimality} constraint reduces the possible choices at each step from O(N2) to approximately O(N), allowing the model to scale to N=30. \item \textbf{State Transition:} The third and fourth lines define the exchange of values between t and t+1. \item \textbf{Frame Axiom:} The nested \texttt{forall} ensures that all values not involved in the swap remain static. Without this, the solver could "teleport" values between steps. \end{enumerate}
+
+\subsection{Symmetry Breaking for Independent Moves} \begin{lstlisting}[language=C] constraint forall(t in 0..k-2) ( (idx1[t] != idx1[t+1] / idx2[t] != idx2[t+1]) /
+
+let { var bool: disjoint = (idx1[t] != idx1[t+1] /\ idx1[t] != idx2[t+1] /\ idx2[t] != idx1[t+1] /\ idx2[t] != idx2[t+1]) } in ( disjoint -> (idx1[t] < idx1[t+1]) ) ); \end{lstlisting} \textbf{Explanation:} \begin{enumerate} \item \textbf{Anti-Undo:} Prevents the solver from performing a swap and then immediately reversing it (e.g., swap(1,2)→swap(1,2)). \item \textbf{Commutativity Pruning:} If two consecutive swaps are disjoint (acting on four different indices), the order in which they are performed is irrelevant. We force a lexicographical order on \texttt{idx1} for disjoint moves to avoid exploring identical plans. \end{enumerate}

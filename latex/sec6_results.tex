@@ -1,0 +1,36 @@
+\section{Experimental Results}
+The benchmark results show a dramatic improvement over basic models.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{grafici_progetto/tempo_vs_n.png}
+    \includegraphics[width=0.45\textwidth]{grafici_progetto/successo_vs_n.png}
+    \caption{Resolution Time (Log scale) and Success Rate vs N.}
+\end{figure}
+
+\subsection{Key Benchmark Analysis}
+
+\subsubsection{Instance \#11 (N=10) - Baseline Failure}
+\begin{itemize}
+    \item \textbf{Input:} \texttt{[5, 6, 4, 10, 3, 2, 7, 1, 9, 8]}
+    \item \textbf{Default Restart:} 33.22s
+    \item \textbf{FirstFail:} 0.10s
+\end{itemize}
+This instance highlights that even for small $N$, a blind default strategy can be 300x slower than a targeted \texttt{FirstFail} approach.
+
+\subsubsection{Instance \#27 (N=15) - Strategy Divergence}
+\begin{itemize}
+    \item \textbf{Input:} \texttt{[10, 14, 4, 12, 5, 3, 6, 8, 11, 7, 2, 9, 13, 15, 1]}
+    \item \textbf{K Found:} 11
+    \item \textbf{FirstFail Time:} 0.15s
+    \item \textbf{DomWdeg Time:} 0.34s
+\end{itemize}
+At $N=15$, the model becomes dense. The domain consistency (GAC) allows \texttt{FirstFail} to solve it instantly.
+
+\subsubsection{Instance \#60 (N=30) - Scalability Wall}
+\begin{itemize}
+    \item \textbf{Input:} \texttt{[26, 16, 5, 21, ..., 27]}
+    \item \textbf{FirstFail:} 0.21s
+    \item \textbf{DomWdeg:} 90.43s
+\end{itemize}
+This is the ultimate test. Without cycle decomposition, this instance is unsolvable in 300s. With it, \texttt{FirstFail} finds the plan in less than a second.
