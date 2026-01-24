@@ -34,7 +34,7 @@ The objective is to find the **minimum plan length $k$** to sort a permutation o
 ### 2. Python Environment
 The meta-solver requires Python 3.10+ and the following libraries:
 ```bash
-pip install minizinc pandas matplotlib seaborn
+pip install -r requirements.txt
 ```
 
 ## 🚀 Execution Workflow
