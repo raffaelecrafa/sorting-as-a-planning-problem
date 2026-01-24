@@ -1,0 +1,112 @@
+Abbiamo diviso il problema in due fasi:
+
+    Fase Base (Punti 1-3): Modellare il problema e risolvere le istanze. (File sorting.mzn e benchmark.py)
+
+    Fase Avanzata (Punto 4): Ottimizzare la ricerca e confrontare strategie. (File sorting_template.mzn e benchmark_strategies.py)
+
+1. FILE: sorting.mzn (Il Modello Base)
+
+Questo file è il "cervello" matematico. Traduce il concetto astratto di "ordinare scambiando numeri" in un linguaggio che il solver (Gecode) può capire.
+
+Cosa fa esattamente: Definisce il problema come un sistema di transizioni di stato su un orizzonte temporale limitato k.
+
+Analisi Dettagliata delle scelte:
+
+    array[0..k, 1..n] of var int: v;
+
+        Cosa: È una matrice bidimensionale. Le righe (0..k) sono il tempo, le colonne (1..n) sono le posizioni nel vettore.
+
+        Perché: In un problema di "Planning", non basta sapere l'inizio e la fine. Dobbiamo tracciare come cambia il vettore passo dopo passo. v[0, ...] è l'input, v[k, ...] è l'output ordinato.
+
+    constraint idx1[t] < idx2[t] (Symmetry Breaking)
+
+        Cosa: Imponiamo che il primo indice dello scambio sia sempre minore del secondo.
+
+        Perché: Scambiare la posizione (2, 5) ha lo stesso effetto di scambiare (5, 2). Senza questo vincolo, il solver perderebbe tempo a testare entrambe le combinazioni. Eliminando questa simmetria, dimezziamo lo spazio di ricerca per ogni mossa.
+
+    Il "Frame Axiom" (La parte più critica):
+
+        Codice: forall(p ... where p != idx1[t] /\ p != idx2[t]) (v[t+1, p] = v[t, p])
+
+        Cosa: Dice: "Se una cella NON è coinvolta nello scambio, il suo valore al tempo t+1 deve essere uguale a quello al tempo t".
+
+        Perché: Questo è l'errore classico dei principianti. Senza questa riga, MiniZinc penserebbe che le celle non toccate possano assumere qualsiasi valore magico. Il Frame Axiom "congela" tutto ciò che non stiamo modificando esplicitamente.
+
+2. FILE: benchmark.py (Il Motore di Ricerca Incrementale)
+
+MiniZinc è un linguaggio dichiarativo (descrive cosa vuoi), non imperativo. Non ha un ciclo while o for per aumentare dinamicamente i parametri. Qui entra in gioco Python.
+
+Cosa fa esattamente: Gestisce la logica di "Iterative Deepening" (approfondimento iterativo).
+
+Analisi Dettagliata delle scelte:
+
+    Il ciclo while not found:
+
+        Cosa: Parte da k=1. Chiede a MiniZinc: "Puoi ordinare questo vettore in 1 mossa?". Se MiniZinc risponde UNSAT (impossibile), Python incrementa k a 2 e richiede: "E in 2 mosse?".
+
+        Perché: Il progetto richiede il piano di lunghezza minima. MiniZinc da solo non sa minimizzare la lunghezza di un array (la lunghezza deve essere fissa all'avvio). L'unico modo per garantire il minimo assoluto è partire dal basso e salire.
+minizinc.Instance(solver, model) dentro il ciclo
+
+    Cosa: Crea una nuova istanza pulita del problema ad ogni tentativo.
+
+    Perché: Una volta che un'istanza è stata provata ed è risultata impossibile (UNSAT), è "bruciata". Non si può cambiare il parametro k di un'istanza già compilata. Bisogna ricrearne una nuova con il nuovo k.
+
+Generazione Benchmark:
+
+    Cosa: Crea liste di numeri casuali (permutazioni).
+
+    Perché: Soddisfa il requisito del punto 2 del progetto ("generate randomly instance benchmarks").
+
+3. FILE: sorting_template.mzn (Il Modello Adattivo)
+
+Per soddisfare il Punto 4 ("try alternative search primitives"), dovevamo testare diverse strategie di ricerca. Invece di creare 3 file .mzn quasi identici, abbiamo creato un template.
+
+Cosa fa esattamente: È identico a sorting.mzn, con due modifiche chiave:
+
+    array[...] all_moves = idx1 ++ idx2;
+
+        Cosa: Concatena i due array delle mosse (idx1 e idx2) in un'unica lunga lista monodimensionale chiamata all_moves.
+
+        Perché: Le annotazioni di ricerca di MiniZinc (int_search) funzionano su array monodimensionali. Per dire al solver "concentrati sulle mosse", dobbiamo fornirgli tutte le variabili di mossa in un unico pacchetto.
+
+    {{SOLVE_STRATEGY}}
+
+        Cosa: Un segnaposto testuale (placeholder). Non è codice MiniZinc valido.
+
+        Perché: Permette a Python di usare la funzione "Trova e Sostituisci" per iniettare codice diverso (le strategie) prima di passare il file al solver. È una tecnica di metaprogrammazione.
+
+4. FILE: benchmark_strategies.py (L'Esperimento Scientifico)
+
+Questo è il file che ti permette di scrivere la parte analitica della relazione. Confronta l'efficienza di diversi algoritmi.
+
+Cosa fa esattamente: Esegue lo stesso problema con tre "cervelli" diversi e cronometra chi vince.
+
+Le 3 Strategie Spiegate (Il "Perché" teorico):
+
+    1. Default (solve satisfy)
+
+        Logica: Gecode (il solver) analizza il modello e decide lui cosa fare. Di solito usa una combinazione di euristiche generiche.
+
+        Risultato: È il nostro punto di riferimento (baseline).
+
+    2. Moves_FirstFail (La Vincitrice)
+
+        Codice: int_search(all_moves, first_fail, ...)
+
+        Logica:
+
+            Diciamo al solver: "Non guardare i valori del vettore (v). Concentrati solo sul decidere QUALI indici scambiare (all_moves)."
+
+            First Fail: "Tra tutte le mosse possibili, prova prima quelle su cui hai più informazioni o che sono più vincolate". In pratica, cerca di identificare subito le mosse obbligatorie o impossibili. Se sbaglia strada, se ne accorge subito (fail fast) e torna indietro.
+
+        Perché funziona: In un problema di planning, le azioni sono le vere variabili decisionali. Lo stato (v) è solo una conseguenza. Decidendo bene le azioni, si risolve il problema velocemente.
+
+    3. Moves_InputOrder (Il Confronto)
+
+        Codice: int_search(all_moves, input_order, ...)
+
+        Logica: Prova le mosse in ordine stupido: scambio (1,2), poi (1,3), poi (1,4)... senza ragionare.
+
+        Perché: Serve a dimostrare che la strategia 2 non vince per caso. Dimostra che l'intelligenza dell'euristica First Fail è superiore a un approccio metodico ma cieco (Input Order).
+
+In sintesi: Hai creato un sistema completo: un modello matematico robusto (.mzn), un sistema di controllo (benchmark.py) per gestire la natura incrementale del problema, e un laboratorio di test automatizzato (strategies.py) per dimostrare empiricamente quale algoritmo è il migliore per le istanze difficili.

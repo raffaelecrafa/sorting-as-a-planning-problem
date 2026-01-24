@@ -1,0 +1,9 @@
+==================================================
+BENCHMARK INSTANCE #17
+==================================================
+
+Dimensione Vettore (N): 10
+Vettore Iniziale    : [6, 8, 9, 10, 1, 2, 3, 4, 5, 7]
+
+Stato: FALLITO / TIMEOUT
+Tempo Trascorso: > 300 secondi
