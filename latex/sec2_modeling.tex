@@ -47,7 +47,20 @@ constraint forall(t in 0..k) (
     alldifferent([v[t, p] | p in 1..n]) :: domain 
 ); 
 \end{lstlisting} 
-The \texttt{inverse} global constraint ensures that $v[t,p]=i\iff pos[t,i]=p$. We are enforcing \textbf{Generalized Arc Consistency (GAC)} via \texttt{:: domain} on the \texttt{alldifferent} constraint, that is much more powerful than simple binary decomposition. Combined with channeling, it allows Gecode to detect conflicts by looking at the "available slots" for values, pruning entire branches of the search tree before any value is assigned.
+The \texttt{inverse} global constraint ensures that $v[t,p]=i\iff pos[t,i]=p$. We are enforcing \textbf{Generalized Arc Consistency (GAC)} via \texttt{:: domain} on the \texttt{alldifferent} constraint, that is much more powerful than simple binary decomposition. Combined with channeling, it allows Gecode to detect conflicts by looking at the "available slots" for values, pruning entire branches of the search tree before any value is assigned. To better understand GAC we can see the following example: 
+
+Let's consider a subset of the vector at time $t$ with three variables $v_1$,$v_2$,$v_3$ and the following domains 
+\begin{itemize} 
+    \item $D(v_1)=\{1,2\}$ 
+    \item $D(v_2)=\{1,2\}$ 
+    \item $D(v_3)=\{1,2,3\}$ 
+\end{itemize}
+Applying the global constraint \texttt{alldifferent($v_1$,$v_2$,$v_3$)} leads to different results depending on the consistency level:
+\begin{enumerate} 
+    \item \textbf{Binary Arc Consistency (AC):} If the solver decomposes the global constraint into binary inequalities ($v_1=v_2$, $v_1=v_3$, $v_2=v_3$), it will fail to prune the domains. For instance, for $v_3=1$, there exists a valid assignment for $v_1$ ($v_1=2$) and $v_2$ (though $v_2$ would be restricted, binary AC does not "see" the simultaneous pressure on values $1$ and $2$). Thus, no values are removed from D($v_3$).
+    \item \textbf{Generalized Arc Consistency (GAC):} GAC analyzes all variables simultaneously. It identifies that the set $\{v_1, v_2\}$ constitutes a "Hall set" of size 2, requiring two values $\{1, 2\}$. Consequently, these values are mathematically unavailable for any other variable in the constraint. GAC instantly prunes 1 and 2 from $D(v_3)$, resulting in $D(v_3) = \{3\}$.
+\end{enumerate}
+In our sorting model, where N can be as large as 30, the ability to prune values before starting the search tree (branching) is vital. By using \texttt{alldifferent :: domain}, we enforce the solver to use Régin's algorithm, which identifies these bottlenecks immediately. Combined with \textbf{Channeling}, this ensures that the solver never explores permutations that are logically impossible, transforming an exponential search into a highly efficient deductive process.
 
 \subsection{Transition Logic and Optimal Search Pruning} 
 This section defines the physics of the environment and applies aggressive pruning based on the properties of minimal plans.
@@ -56,7 +69,7 @@ This section defines the physics of the environment and applies aggressive pruni
 constraint forall(t in 0..k-1) ( 
     idx1[t] < idx2[t] /\
     
-    % In un piano ottimo, ogni scambio sistema almeno un elemento
+    % In an optimal plan, each exchange fixes at least one element
     (v[t, idx2[t]] = idx1[t] \/ v[t, idx1[t]] = idx2[t]) /\
     
     v[t+1, idx1[t]] = v[t, idx2[t]] /\
@@ -66,8 +79,36 @@ constraint forall(t in 0..k-1) (
     )
 ); 
 \end{lstlisting} 
-\textbf{Detailed Analysis:} \begin{enumerate} \item \textbf{Canonical Representation:} \texttt{idx1[t] < idx2[t]} prevents the solver from considering swap(2,1) as different from swap(1,2), halving the branching factor. \item \textbf{Optimal Swap Property:} The constraint \texttt{(v[t, idx2[t]] = idx1[t] / v[t, idx1[t]] = idx2[t])} is the most significant optimization. \textbf{Motivation:} In a minimum-length plan for the sorting problem, it is never optimal to make a swap that doesn't put at least one element into its correct final position. This \textbf{Local Optimality} constraint reduces the possible choices at each step from O(N2) to approximately O(N), allowing the model to scale to N=30. \item \textbf{State Transition:} The third and fourth lines define the exchange of values between t and t+1. \item \textbf{Frame Axiom:} The nested \texttt{forall} ensures that all values not involved in the swap remain static. Without this, the solver could "teleport" values between steps. \end{enumerate}
+What are we doing with the code section above:
+\begin{enumerate} 
+    \item \textbf{Canonical Representation:} \texttt{idx1[t] < idx2[t]} prevents the solver from considering swap(2,1) as different from swap(1,2), halving the branching factor. 
+    \item \textbf{Optimal Swap Property:} The constraint \texttt{(v[t, idx2[t]] = idx1[t] \textbackslash/ v[t, idx1[t]] = idx2[t])} is the most significant optimization. In a minimum-length plan for the sorting problem, it is never optimal to make a swap that doesn't put at least one element into its correct final position. This \textbf{Local Optimality} constraint reduces the possible choices at each step from $O(N^2)$ to approximately $O(N)$, allowing the model to scale to N=30. 
+    \item \textbf{State Transition:} The third and fourth constraints (lines 7 and 8 of the above code) define the exchange of values between t and t+1. 
+    \item \textbf{Frame Axiom:} The nested \texttt{forall} ensures that all values not involved in the swap remain static. Without this, the solver could "teleport" values between steps. 
+\end{enumerate}
 
-\subsection{Symmetry Breaking for Independent Moves} \begin{lstlisting}[language=C] constraint forall(t in 0..k-2) ( (idx1[t] != idx1[t+1] / idx2[t] != idx2[t+1]) /
-
-let { var bool: disjoint = (idx1[t] != idx1[t+1] /\ idx1[t] != idx2[t+1] /\ idx2[t] != idx1[t+1] /\ idx2[t] != idx2[t+1]) } in ( disjoint -> (idx1[t] < idx1[t+1]) ) ); \end{lstlisting} \textbf{Explanation:} \begin{enumerate} \item \textbf{Anti-Undo:} Prevents the solver from performing a swap and then immediately reversing it (e.g., swap(1,2)→swap(1,2)). \item \textbf{Commutativity Pruning:} If two consecutive swaps are disjoint (acting on four different indices), the order in which they are performed is irrelevant. We force a lexicographical order on \texttt{idx1} for disjoint moves to avoid exploring identical plans. \end{enumerate}
+\subsection{Symmetry Breaking for Independent Moves} 
+\begin{lstlisting}[language=C] 
+constraint forall(t in 0..k-2) (
+    (idx1[t] != idx1[t+1] \/ idx2[t] != idx2[t+1]) /\
+    let {
+        var bool: disjoint = (idx1[t] != idx1[t+1] /\ 
+                              idx1[t] != idx2[t+1] /\ 
+                              idx2[t] != idx1[t+1] /\ 
+                              idx2[t] != idx2[t+1])
+    } in (
+        disjoint -> (idx1[t] < idx1[t+1])
+    )
+);
+\end{lstlisting} 
+We are
+\begin{enumerate} 
+\item Preventing the solver from performing a swap and then immediately reversing it (e.g., swap(1,2)→swap(1,2)). 
+\item If two consecutive swaps are disjoint (acting on four different indices), the order in which they are performed is irrelevant, therefore we force a lexicographical order on \texttt{idx1} for disjoint moves to avoid exploring identical plans. Consider, for exmple, the vector $V_t = [2, 1, 4, 3]$. To sort it, two disjoint swaps are required: $S_A$ at indices $(1, 2)$ and $S_B$ at indices $(3, 4)$.
+The solver could explore two equivalent sequences:
+\begin{enumerate}
+    \item $[2, 1, 4, 3] \xrightarrow{S_A} [1, 2, 4, 3] \xrightarrow{S_B} [1, 2, 3, 4]$ (Sequence: $idx1[0]=1, idx1[1]=3$)
+    \item $[2, 1, 4, 3] \xrightarrow{S_B} [2, 1, 3, 4] \xrightarrow{S_A} [1, 2, 3, 4]$ (Sequence: $idx1[0]=3, idx1[1]=1$)
+\end{enumerate}
+The constraint \texttt{disjoint -> (idx1[t] < idx1[t+1])} ensures that only the first sequence is explored, as $1 < 3$ is true while $3 < 1$ is false. This effectively removes redundant search branches that lead to the same state.
+\end{enumerate}
