@@ -2,6 +2,8 @@
 
 This repository contains the implementation of **Project 5** for the **Constraint Programming** course (2025). The project explores modeling the sorting of a vector as a discrete-time planning problem, identifying the minimum sequence of pairwise swaps required to reach a sorted state.
 
+> 📖 **Per una spiegazione dettagliata del problema e dei vincoli, consulta [SPIEGAZIONE.md](SPIEGAZIONE.md)**
+
 ## 📋 Project Overview
 
 The objective is to find the **minimum plan length $k$** to sort a permutation of $N$ integers. While basic CP models struggle with the combinatorial explosion of planning horizons, this solution implements state-of-the-art optimizations to achieve high performance even for $N=30$.
@@ -14,6 +16,7 @@ The objective is to find the **minimum plan length $k$** to sort a permutation o
   - **Optimal Swap Property**: Restricts moves to those that fix at least one element, reducing the branching factor from $O(N^2)$ to $O(N)$.
 - **Iterative Deepening Meta-Solver**: A Python-based engine that finds the global optimum for $k$.
 - **Theoretical Lower Bounds**: Uses **Cycle Decomposition** to jump directly to the mathematically minimum possible $k$, bypassing the expensive UNSAT phase.
+- **12 Search Strategies**: Comprehensive benchmarking of variable/value selection heuristics and restart policies.
 
 ## 📂 Repository Structure
 
@@ -22,8 +25,9 @@ The objective is to find the **minimum plan length $k$** to sort a permutation o
 | `sorting.mzn` | Core MiniZinc model with advanced constraints (Inverse, GAC, Parity). |
 | `sorting_template.mzn` | Parameterized model for benchmarking different search heuristics. |
 | `benchmark.py` | Basic Iterative Deepening solver. |
-| `benchmark_strategies.py` | Advanced experimental engine with cycle decomposition and Luby restarts. |
-| `plot.py` | Data visualization script to generate performance graphs from CSV results. |
+| `benchmark_strategies.py` | Advanced experimental engine with 12 search strategies. |
+| `plot.py` | Data visualization script (generates 11 different charts). |
+| `SPIEGAZIONE.md` | Detailed explanation of the problem, constraints, and strategies (in Italian). |
 
 ## 🛠 Prerequisites
 
@@ -39,34 +43,102 @@ pip install -r requirements.txt
 
 ## 🚀 Execution Workflow
 
-### 1. Run the basic benchmark to verify the correctness of the sorting.mzn model and the iterative deepening logic:
-```
+### 1. Basic Benchmark
+Run the basic benchmark to verify the correctness of the sorting.mzn model:
+```bash
 python benchmark.py
 ```
 
-### 2. Run the advanced engine to compare different heuristics (FirstFail vs DomWdeg vs Default):
-```
-python benchmark_strategies.py
+### 2. Strategy Benchmark
+Run the advanced engine to compare different search strategies:
+
+```bash
+# Show available strategies
+python benchmark_strategies.py --list
+
+# Run ALL 12 strategies
+python benchmark_strategies.py --all
+
+# Run specific strategies
+python benchmark_strategies.py default firstfail domwdeg
+
+# Run with custom parameters
+python benchmark_strategies.py --all --timeout 60 --sizes 5 10 15 --instances 5
 ```
 
-### 3. Generate plots:
-```
+#### Available Strategies
+
+| Strategy | Variable Selection | Value Selection | Restart |
+|----------|-------------------|-----------------|---------|
+| `default` | Gecode default | default | Luby(250) |
+| `firstfail` | first_fail | indomain_random | Luby(250) |
+| `domwdeg` | dom_w_deg | indomain_random | Luby(250) |
+| `smallest` | smallest | indomain_min | Luby(250) |
+| `mostconstrained` | most_constrained | indomain_random | Luby(250) |
+| `maxregret` | max_regret | indomain_random | Luby(250) |
+| `antifirstfail` | anti_first_fail | indomain_random | Luby(250) |
+| `domwdeg_split` | dom_w_deg | indomain_split | Luby(250) |
+| `firstfail_split` | first_fail | indomain_split | Luby(250) |
+| `geometric` | dom_w_deg | indomain_random | Geometric(1.5, 100) |
+| `linear` | dom_w_deg | indomain_random | Linear(250) |
+| `norestart` | dom_w_deg | indomain_random | None |
+
+#### CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--all`, `-a` | Run all available strategies |
+| `--list`, `-l` | List available strategies and exit |
+| `--timeout`, `-t` | Timeout in seconds per instance (default: 300) |
+| `--sizes`, `-s` | Vector sizes to test (default: 5 10 15 20 25 30) |
+| `--instances`, `-n` | Number of instances per size (default: 10) |
+
+### 3. Generate Plots
+Generate performance visualizations from benchmark results:
+```bash
 python plot.py
 ```
 
+#### Generated Charts (11 total)
+
+| File | Description |
+|------|-------------|
+| `01_tempo_vs_n.png` | Average solving time vs vector size |
+| `02_successo_vs_n.png` | Number of solved instances per N |
+| `03_boxplot_tempi.png` | Time distribution per strategy (boxplot) |
+| `04_heatmap_tempo.png` | Heatmap of average time (Strategy × N) |
+| `05_heatmap_successo.png` | Heatmap of success rate (Strategy × N) |
+| `06_ranking_strategie.png` | Strategy ranking by average time |
+| `07_violin_plot.png` | Detailed time distribution (violin plot) |
+| `08_speedup.png` | Relative speedup vs baseline |
+| `09_stabilita_strategie.png` | Time variability (standard deviation) |
+| `10_k_vs_tempo.png` | Correlation between plan length K and time |
+| `11_dashboard.png` | Summary dashboard (4-in-1) |
+
 ## 🧠 Core Optimization Logic
+
 The efficiency of this project relies on three pillars of Constraint Programming:
 
-  1. Dual Representation (Channeling): By linking values to their positions through an inverse constraint, any domain reduction in one viewpoint is instantly reflected in the other.
+1. **Dual Representation (Channeling)**: By linking values to their positions through an inverse constraint, any domain reduction in one viewpoint is instantly reflected in the other.
 
-  2. Generalized Arc Consistency (GAC): Using alldifferent :: domain (Régin's algorithm) to prune the search tree far more aggressively than standard binary constraints.
+2. **Generalized Arc Consistency (GAC)**: Using `alldifferent :: domain` (Régin's algorithm) to prune the search tree far more aggressively than standard binary constraints.
 
-  3. Mathematical Pruning: The Parity Constraint ensures that the solver never explores even k values for odd permutations (and vice-versa), effectively halving the search space during the "UNSAT" phase.
+3. **Mathematical Pruning**: The Parity Constraint ensures that the solver never explores even k values for odd permutations (and vice-versa), effectively halving the search space during the "UNSAT" phase.
 
-----------------------------------------------------------
+## 📊 Output Structure
 
-Author: Raffaele Crafa
+```
+result_benchmark_strategies/
+├── summary_results.csv          # All results in CSV format
+├── 01_Default_Restart/          # Results for each strategy
+│   ├── result_01_N5.txt
+│   ├── result_02_N5.txt
+│   └── ...
+├── 02_Moves_FirstFail/
+└── ...
 
-Course: Constraint Programming 2025
-
-University: Università di Parma
+grafici_progetto/
+├── 01_tempo_vs_n.png
+├── 02_successo_vs_n.png
+└── ...
+```
