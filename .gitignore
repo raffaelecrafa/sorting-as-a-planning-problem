@@ -1,3 +1,15 @@
 .DS_Store
 results/
 graphs/
+
+# Latex
+*.aux
+*.log
+*.out
+*.toc
+*.pdf
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.bbl
+*.blg
