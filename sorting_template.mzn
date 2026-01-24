@@ -140,27 +140,74 @@ constraint forall(t in 0..k-2) (
 % Questo placeholder viene sostituito dinamicamente da benchmark_strategies.py
 % con una delle seguenti strategie:
 %
-% 1. DEFAULT RESTART:
+% STRATEGIE BASE:
+% ---------------
+% 1. DEFAULT:
 %    solve :: restart_luby(250) satisfy;
 %    → Usa l'euristica di default di Gecode
 %
-% 2. MOVES FIRSTFAIL:
+% 2. FIRSTFAIL:
 %    solve :: restart_luby(250)
-%          :: int_search(all_moves, first_fail, indomain_random, complete)
-%          satisfy;
+%          :: int_search(all_moves, first_fail, indomain_random, complete) satisfy;
 %    → first_fail: sceglie la variabile con dominio più piccolo
-%    → indomain_random: sceglie un valore casuale dal dominio
-%    → Focus sulle variabili delle mosse (idx1, idx2)
 %
-% 3. MOVES DOMWDEG:
+% 3. DOMWDEG:
 %    solve :: restart_luby(250)
-%          :: int_search(all_moves, dom_w_deg, indomain_random, complete)
-%          satisfy;
+%          :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
 %    → dom_w_deg: domain / weighted degree (euristica adattiva)
 %    → Impara dai fallimenti: penalizza variabili "problematiche"
-%    → Generalmente la più efficace per problemi difficili
 %
-% LUBY RESTART (comune a tutte):
+% STRATEGIE AVANZATE DI SELEZIONE VARIABILE:
+% ------------------------------------------
+% 4. SMALLEST:
+%    solve :: restart_luby(250)
+%          :: int_search(all_moves, smallest, indomain_min, complete) satisfy;
+%    → smallest: sceglie variabile con valore minimo nel dominio
+%
+% 5. MOSTCONSTRAINED:
+%    solve :: restart_luby(250)
+%          :: int_search(all_moves, most_constrained, indomain_random, complete) satisfy;
+%    → most_constrained: first_fail + numero di vincoli (più aggressivo)
+%
+% 6. MAXREGRET:
+%    solve :: restart_luby(250)
+%          :: int_search(all_moves, max_regret, indomain_random, complete) satisfy;
+%    → max_regret: massimizza differenza tra miglior e secondo valore
+%
+% 7. ANTIFIRSTFAIL:
+%    solve :: restart_luby(250)
+%          :: int_search(all_moves, anti_first_fail, indomain_random, complete) satisfy;
+%    → anti_first_fail: sceglie variabile con dominio PIÙ GRANDE
+%
+% STRATEGIE CON BISECTION:
+% ------------------------
+% 8. DOMWDEG_SPLIT:
+%    solve :: restart_luby(250)
+%          :: int_search(all_moves, dom_w_deg, indomain_split, complete) satisfy;
+%    → indomain_split: divide il dominio a metà invece di enumerare
+%
+% 9. FIRSTFAIL_SPLIT:
+%    solve :: restart_luby(250)
+%          :: int_search(all_moves, first_fail, indomain_split, complete) satisfy;
+%    → Combina first_fail con bisection
+%
+% STRATEGIE CON RESTART ALTERNATIVI:
+% ----------------------------------
+% 10. GEOMETRIC:
+%     solve :: restart_geometric(1.5, 100)
+%           :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
+%     → Restart geometrico: scala × 1.5 ogni volta (100, 150, 225, ...)
+%
+% 11. LINEAR:
+%     solve :: restart_linear(250)
+%           :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
+%     → Restart lineare: incremento fisso (250, 500, 750, ...)
+%
+% 12. NORESTART:
+%     solve :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
+%     → NESSUN restart - baseline per confronto
+%
+% LUBY RESTART (usato da strategie 1-9):
 %    Sequenza: 1,1,2,1,1,2,4,1,1,2,1,1,2,4,8,...
 %    Scala: 250 (riavvia dopo 250×L fallimenti)
 %    Scopo: sfuggire a zone "morte" dello spazio di ricerca
