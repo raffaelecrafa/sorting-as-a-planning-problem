@@ -5,7 +5,9 @@ import os
 import csv
 import warnings
 import argparse
-from datetime import timedelta
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 warnings.filterwarnings("ignore", message=".*model inconsistency detected.*")
 
@@ -13,8 +15,11 @@ warnings.filterwarnings("ignore", message=".*model inconsistency detected.*")
 TEMPLATE_FILE = "sorting_template.mzn"
 SOLVER_NAME = "gecode"
 TIMEOUT_SEC = 300
-OUTPUT_ROOT = "result_benchmark_strategies"
-SUMMARY_CSV = "summary_results.csv"
+OUTPUT_ROOT = "results"
+
+# Lock per scrittura thread-safe su CSV e console
+csv_lock = threading.Lock()
+print_lock = threading.Lock()
 
 # Dizionario delle strategie disponibili
 STRATEGIES = {
@@ -78,9 +83,8 @@ Strategie disponibili:
     parser.add_argument(
         "strategies",
         nargs="*",
-        choices=list(STRATEGIES.keys()),
         metavar="STRATEGY",
-        help="Strategie da eseguire (default, firstfail, domwdeg)"
+        help="Strategie da eseguire (default, firstfail, domwdeg, ...)"
     )
 
     parser.add_argument(
@@ -115,6 +119,19 @@ Strategie disponibili:
         type=int,
         default=10,
         help="Numero di istanze per ogni dimensione (default: 10)"
+    )
+
+    parser.add_argument(
+        "--workers", "-w",
+        type=int,
+        default=None,
+        help="Numero di thread paralleli (default: numero di strategie selezionate)"
+    )
+
+    parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Esegue in modalità sequenziale (disabilita multithreading)"
     )
 
     return parser.parse_args()
@@ -223,62 +240,56 @@ def generate_benchmarks(sizes, instances_per_size):
     return benchmarks
 
 
-if __name__ == "__main__":
-    args = parse_args()
-
-    # Mostra lista strategie ed esci
-    if args.list:
-        list_strategies()
-        exit(0)
-
-    # Determina quali strategie eseguire
-    if args.all:
-        selected_strategies = list(STRATEGIES.keys())
-    elif args.strategies:
-        selected_strategies = args.strategies
-    else:
-        # Se nessuna strategia specificata, mostra help
-        print("Errore: specifica almeno una strategia o usa --all")
-        print("Usa --help per vedere le opzioni disponibili")
-        print("Usa --list per vedere le strategie disponibili")
-        exit(1)
-
-    # Rimuovi duplicati mantenendo l'ordine
-    selected_strategies = list(dict.fromkeys(selected_strategies))
-
-    timeout_sec = args.timeout
-
-    if not os.path.exists(TEMPLATE_FILE):
-        print(f"ERRORE: Manca {TEMPLATE_FILE}")
-        exit(1)
-
-    if not os.path.exists(OUTPUT_ROOT):
-        os.makedirs(OUTPUT_ROOT)
-
-    # Crea cartelle solo per le strategie selezionate
-    for strat_name in selected_strategies:
-        folder_name = STRATEGY_FOLDER_NAMES[strat_name]
-        path = os.path.join(OUTPUT_ROOT, folder_name)
-        if not os.path.exists(path):
-            os.makedirs(path)
-
+def run_strategy_benchmark(strat_name, tasks, timeout_sec, csv_path, run_dir):
+    """
+    Esegue il benchmark per una singola strategia su tutte le istanze.
+    Questa funzione viene eseguita in un thread separato.
+    """
     solver = minizinc.Solver.lookup(SOLVER_NAME)
-    tasks = generate_benchmarks(args.sizes, args.instances)
+    strat_code = STRATEGIES[strat_name]
+    folder_name = STRATEGY_FOLDER_NAMES[strat_name]
+    folder_path = os.path.join(run_dir, folder_name)
 
-    csv_path = os.path.join(OUTPUT_ROOT, SUMMARY_CSV)
-    with open(csv_path, "w", newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["ID", "N", "Strategy", "K", "Time", "Status"])
+    results = []
 
-    print(f"\n=== BENCHMARK COMPARATIVO ===")
-    print(f"Strategie: {', '.join(selected_strategies)}")
-    print(f"Dimensioni: {args.sizes}")
-    print(f"Istanze per dimensione: {args.instances}")
-    print(f"Timeout: {timeout_sec}s")
-    print(f"Totale test: {len(tasks)} istanze × {len(selected_strategies)} strategie = {len(tasks) * len(selected_strategies)} esecuzioni")
-    print("-" * 85)
-    print(f"{'Inst':<5} | {'N':<3} | {'Strategy':<25} | {'K':<3} | {'Time (s)':<10}")
-    print("-" * 85)
+    for i, (n, vec) in enumerate(tasks):
+        instance_id = i + 1
+
+        k, t_elapsed, res_obj = solve_with_strategy(solver, n, vec, strat_code, timeout_sec)
+
+        status_str = "OK" if k != -1 else "TIMEOUT"
+        time_str = f"{t_elapsed:.4f}" if k != -1 else f">{timeout_sec}s"
+
+        # Stampa thread-safe
+        with print_lock:
+            print(f"#{instance_id:<4} | {n:<3} | {strat_name:<25} | {str(k):<3} | {time_str:<10}")
+
+        # Salva file dettagliato
+        save_detailed_file(folder_path, instance_id, n, vec, strat_name, k, t_elapsed, res_obj, timeout_sec)
+
+        # Scrittura CSV thread-safe
+        with csv_lock:
+            with open(csv_path, "a", newline='') as csvfile:
+                csv.writer(csvfile).writerow([
+                    instance_id, n, strat_name, k,
+                    (t_elapsed if k != -1 else timeout_sec), status_str
+                ])
+
+        results.append({
+            'instance_id': instance_id,
+            'n': n,
+            'strategy': strat_name,
+            'k': k,
+            'time': t_elapsed,
+            'status': status_str
+        })
+
+    return strat_name, results
+
+
+def run_sequential(selected_strategies, tasks, timeout_sec, csv_path, run_dir):
+    """Esegue il benchmark in modalità sequenziale (comportamento originale)"""
+    solver = minizinc.Solver.lookup(SOLVER_NAME)
 
     for i, (n, vec) in enumerate(tasks):
         instance_id = i + 1
@@ -293,7 +304,7 @@ if __name__ == "__main__":
             print(f"#{instance_id:<4} | {n:<3} | {strat_name:<25} | {str(k):<3} | {time_str:<10}")
 
             save_detailed_file(
-                os.path.join(OUTPUT_ROOT, folder_name),
+                os.path.join(run_dir, folder_name),
                 instance_id, n, vec, strat_name, k, t_elapsed, res_obj, timeout_sec
             )
 
@@ -304,6 +315,138 @@ if __name__ == "__main__":
                 ])
         print("-" * 85)
 
+
+def run_parallel(selected_strategies, tasks, timeout_sec, csv_path, max_workers, run_dir):
+    """Esegue il benchmark in modalità parallela (un thread per strategia)"""
+    print(f"\nModalità PARALLELA: {max_workers} thread (una strategia per thread)")
+    print("-" * 85)
+
+    completed = 0
+    total_strategies = len(selected_strategies)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Sottometti un task per ogni strategia
+        future_to_strategy = {
+            executor.submit(run_strategy_benchmark, strat_name, tasks, timeout_sec, csv_path, run_dir): strat_name
+            for strat_name in selected_strategies
+        }
+
+        # Raccogli i risultati man mano che completano
+        for future in as_completed(future_to_strategy):
+            strat_name = future_to_strategy[future]
+            try:
+                strategy, results = future.result()
+                completed += 1
+
+                # Calcola statistiche per questa strategia
+                solved = sum(1 for r in results if r['status'] == 'OK')
+                total = len(results)
+                avg_time = sum(r['time'] for r in results if r['status'] == 'OK') / max(solved, 1)
+
+                with print_lock:
+                    print(f"\n[{completed}/{total_strategies}] Strategia '{strategy}' completata:")
+                    print(f"   Risolte: {solved}/{total} | Tempo medio: {avg_time:.4f}s")
+
+            except Exception as e:
+                with print_lock:
+                    print(f"\nErrore nella strategia '{strat_name}': {e}")
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    # Mostra lista strategie ed esci
+    if args.list:
+        list_strategies()
+        exit(0)
+
+    # Determina quali strategie eseguire
+    if args.all:
+        selected_strategies = list(STRATEGIES.keys())
+    elif args.strategies:
+        # Valida le strategie specificate
+        invalid = [s for s in args.strategies if s not in STRATEGIES]
+        if invalid:
+            print(f"Errore: strategie non valide: {', '.join(invalid)}")
+            print(f"Strategie disponibili: {', '.join(STRATEGIES.keys())}")
+            exit(1)
+        selected_strategies = args.strategies
+    else:
+        # Se nessuna strategia specificata, mostra help
+        print("Errore: specifica almeno una strategia o usa --all")
+        print("Usa --help per vedere le opzioni disponibili")
+        print("Usa --list per vedere le strategie disponibili")
+        exit(1)
+
+    # Rimuovi duplicati mantenendo l'ordine
+    selected_strategies = list(dict.fromkeys(selected_strategies))
+
+    timeout_sec = args.timeout
+
+    # Determina numero di worker
+    if args.workers:
+        max_workers = args.workers
+    else:
+        max_workers = len(selected_strategies)
+
+    if not os.path.exists(TEMPLATE_FILE):
+        print(f"ERRORE: Manca {TEMPLATE_FILE}")
+        exit(1)
+
+    if not os.path.exists(OUTPUT_ROOT):
+        os.makedirs(OUTPUT_ROOT)
+
+    # Genera timestamp per questa esecuzione
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = os.path.join(OUTPUT_ROOT, timestamp)
+    os.makedirs(run_dir)
+
+    # Crea cartelle solo per le strategie selezionate
+    for strat_name in selected_strategies:
+        folder_name = STRATEGY_FOLDER_NAMES[strat_name]
+        path = os.path.join(run_dir, folder_name)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+    tasks = generate_benchmarks(args.sizes, args.instances)
+
+    # Nome CSV con timestamp
+    csv_filename = f"summary_{timestamp}.csv"
+    csv_path = os.path.join(run_dir, csv_filename)
+    with open(csv_path, "w", newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["ID", "N", "Strategy", "K", "Time", "Status"])
+
+    print(f"\n=== BENCHMARK COMPARATIVO ===")
+    print(f"Timestamp: {timestamp}")
+    print(f"Strategie: {', '.join(selected_strategies)}")
+    print(f"Dimensioni: {args.sizes}")
+    print(f"Istanze per dimensione: {args.instances}")
+    print(f"Timeout: {timeout_sec}s")
+    print(f"Totale test: {len(tasks)} istanze × {len(selected_strategies)} strategie = {len(tasks) * len(selected_strategies)} esecuzioni")
+
+    if args.sequential:
+        print(f"Modalità: SEQUENZIALE")
+        print("-" * 85)
+        print(f"{'Inst':<5} | {'N':<3} | {'Strategy':<25} | {'K':<3} | {'Time (s)':<10}")
+        print("-" * 85)
+
+        start_time = time.time()
+        run_sequential(selected_strategies, tasks, timeout_sec, csv_path, run_dir)
+        total_time = time.time() - start_time
+    else:
+        print(f"Modalità: PARALLELA ({max_workers} thread)")
+        print("-" * 85)
+        print(f"{'Inst':<5} | {'N':<3} | {'Strategy':<25} | {'K':<3} | {'Time (s)':<10}")
+        print("-" * 85)
+
+        start_time = time.time()
+        run_parallel(selected_strategies, tasks, timeout_sec, csv_path, max_workers, run_dir)
+        total_time = time.time() - start_time
+
     print(f"\n=== COMPLETATO ===")
-    print(f"Risultati salvati in: {OUTPUT_ROOT}/")
+    print(f"Tempo totale: {total_time:.2f}s")
+    print(f"Risultati salvati in: {run_dir}/")
     print(f"Riepilogo CSV: {csv_path}")
+    print(f"\nPer generare i grafici:")
+    print(f"  python plot.py {csv_path}")

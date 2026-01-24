@@ -3,18 +3,43 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import os
+import argparse
+from matplotlib.ticker import LogLocator, FuncFormatter
 
 # --- CONFIGURAZIONE ---
-CSV_FILE = "result_benchmark_strategies/summary_results.csv"
-OUTPUT_DIR = "grafici_progetto"
+OUTPUT_ROOT = "graphs"
 
-def generate_performance_plots():
-    if not os.path.exists(CSV_FILE):
-        print(f"Errore: non trovo {CSV_FILE}")
+def log2_formatter(x, pos):
+    """Formatter per mostrare potenze di 2 sull'asse"""
+    if x <= 0:
+        return ''
+    exp = np.log2(x)
+    if exp == int(exp):
+        return f'$2^{{{int(exp)}}}$'
+    return f'{x:.3g}'
+
+
+def setup_log2_scale(ax, axis='y'):
+    """Configura scala logaritmica in base 2 per un asse"""
+    if axis == 'y':
+        ax.set_yscale('log', base=2)
+        ax.yaxis.set_major_formatter(FuncFormatter(log2_formatter))
+    else:
+        ax.set_xscale('log', base=2)
+        ax.xaxis.set_major_formatter(FuncFormatter(log2_formatter))
+
+
+def generate_performance_plots(csv_file):
+    if not os.path.exists(csv_file):
+        print(f"Errore: non trovo {csv_file}")
         return
 
     # Caricamento dati
-    df = pd.read_csv(CSV_FILE)
+    df = pd.read_csv(csv_file)
+
+    # Estrai nome base dal file CSV per creare sottocartella
+    csv_basename = os.path.splitext(os.path.basename(csv_file))[0]
+    OUTPUT_DIR = os.path.join(OUTPUT_ROOT, csv_basename)
 
     # Creazione cartella output
     if not os.path.exists(OUTPUT_DIR):
@@ -34,12 +59,12 @@ def generate_performance_plots():
     plt.figure(figsize=(12, 7))
     avg_time = df.groupby(['N', 'Strategy'])['Time'].mean().reset_index()
 
-    sns.lineplot(data=avg_time, x='N', y='Time', hue='Strategy',
+    ax = sns.lineplot(data=avg_time, x='N', y='Time', hue='Strategy',
                  marker='o', linewidth=2.5, palette=palette)
     plt.title('Prestazioni Medie: Tempo di Risoluzione vs Dimensione Vettore', fontsize=14)
     plt.xlabel('Dimensione del Vettore (N)')
     plt.ylabel('Tempo Medio (secondi)')
-    plt.yscale('log')
+    setup_log2_scale(plt.gca(), 'y')
     plt.legend(title='Strategia', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(f"{OUTPUT_DIR}/01_tempo_vs_n.png", dpi=150)
@@ -75,7 +100,7 @@ def generate_performance_plots():
     plt.title('Distribuzione Tempi di Risoluzione per Strategia', fontsize=14)
     plt.xlabel('Strategia')
     plt.ylabel('Tempo (secondi)')
-    plt.yscale('log')
+    setup_log2_scale(plt.gca(), 'y')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig(f"{OUTPUT_DIR}/03_boxplot_tempi.png", dpi=150)
@@ -155,7 +180,7 @@ def generate_performance_plots():
     plt.title('Distribuzione Tempi per Dimensione (Violin Plot)', fontsize=14)
     plt.xlabel('Dimensione del Vettore (N)')
     plt.ylabel('Tempo (secondi)')
-    plt.yscale('log')
+    setup_log2_scale(plt.gca(), 'y')
     plt.legend(title='Strategia', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(f"{OUTPUT_DIR}/07_violin_plot.png", dpi=150)
@@ -220,7 +245,7 @@ def generate_performance_plots():
     plt.title('Correlazione: Lunghezza Piano (K) vs Tempo di Risoluzione', fontsize=14)
     plt.xlabel('Lunghezza Piano (K = numero di swap)')
     plt.ylabel('Tempo (secondi)')
-    plt.yscale('log')
+    setup_log2_scale(plt.gca(), 'y')
     plt.legend(title='Strategia', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(f"{OUTPUT_DIR}/10_k_vs_tempo.png", dpi=150)
@@ -238,7 +263,7 @@ def generate_performance_plots():
     for strat in strategies[:5]:  # Solo prime 5 per leggibilità
         data = avg_time[avg_time['Strategy'] == strat]
         ax1.plot(data['N'], data['Time'], marker='o', label=strat, linewidth=2)
-    ax1.set_yscale('log')
+    setup_log2_scale(ax1, 'y')
     ax1.set_xlabel('N')
     ax1.set_ylabel('Tempo (s)')
     ax1.set_title('Tempo Medio vs N (Top 5)')
@@ -297,5 +322,26 @@ def generate_performance_plots():
     print("  11_dashboard.png        - Dashboard riepilogativo")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Genera grafici di performance dai risultati del benchmark.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Esempi di utilizzo:
+  python plot.py risultati/summary_2024-01-24_15-30-00.csv
+  python plot.py result_benchmark_strategies/summary_results.csv
+"""
+    )
+
+    parser.add_argument(
+        "csv_file",
+        type=str,
+        help="Path del file CSV con i risultati del benchmark"
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    generate_performance_plots()
+    args = parse_args()
+    generate_performance_plots(args.csv_file)
