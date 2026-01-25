@@ -67,9 +67,9 @@ def generate_performance_plots(csv_file):
     setup_log2_scale(plt.gca(), 'y')
     plt.legend(title='Strategy', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/01_tempo_vs_n.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/01_tempo_vs_n.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/01_tempo_vs_n.png")
+    print(f"Saved: {OUTPUT_DIR}/01_tempo_vs_n.pdf")
 
     # =========================================================================
     # GRAPH 2: SUCCESS vs N (Bar Plot)
@@ -84,9 +84,9 @@ def generate_performance_plots(csv_file):
     plt.ylim(0, 11)
     plt.legend(title='Strategy', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/02_successo_vs_n.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/02_successo_vs_n.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/02_successo_vs_n.png")
+    print(f"Saved: {OUTPUT_DIR}/02_successo_vs_n.pdf")
 
     # =========================================================================
     # GRAPH 3: BOXPLOT OF TIMES BY STRATEGY
@@ -103,9 +103,9 @@ def generate_performance_plots(csv_file):
     setup_log2_scale(plt.gca(), 'y')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/03_boxplot_tempi.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/03_boxplot_tempi.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/03_boxplot_tempi.png")
+    print(f"Saved: {OUTPUT_DIR}/03_boxplot_tempi.pdf")
 
     # =========================================================================
     # GRAPH 4: HEATMAP OF AVERAGE TIME (Strategy x N)
@@ -121,9 +121,9 @@ def generate_performance_plots(csv_file):
     plt.xlabel('Vector Size (N)')
     plt.ylabel('Strategy')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/04_heatmap_tempo.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/04_heatmap_tempo.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/04_heatmap_tempo.png")
+    print(f"Saved: {OUTPUT_DIR}/04_heatmap_tempo.pdf")
 
     # =========================================================================
     # GRAPH 5: HEATMAP OF SUCCESS RATE (Strategy x N)
@@ -143,9 +143,9 @@ def generate_performance_plots(csv_file):
     plt.xlabel('Vector Size (N)')
     plt.ylabel('Strategy')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/05_heatmap_successo.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/05_heatmap_successo.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/05_heatmap_successo.png")
+    print(f"Saved: {OUTPUT_DIR}/05_heatmap_successo.pdf")
 
     # =========================================================================
     # GRAPH 6: STRATEGY RANKING (Total Average Time)
@@ -166,9 +166,9 @@ def generate_performance_plots(csv_file):
                 f'{val:.3f}s', va='center', fontsize=10)
 
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/06_ranking_strategie.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/06_ranking_strategie.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/06_ranking_strategie.png")
+    print(f"Saved: {OUTPUT_DIR}/06_ranking_strategie.pdf")
 
     # =========================================================================
     # GRAPH 7: VIOLIN PLOT (Detailed distribution by N)
@@ -183,9 +183,9 @@ def generate_performance_plots(csv_file):
     setup_log2_scale(plt.gca(), 'y')
     plt.legend(title='Strategy', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/07_violin_plot.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/07_violin_plot.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/07_violin_plot.png")
+    print(f"Saved: {OUTPUT_DIR}/07_violin_plot.pdf")
 
     # =========================================================================
     # GRAPH 8: SPEEDUP RELATIVE TO BASELINE
@@ -212,9 +212,9 @@ def generate_performance_plots(csv_file):
     plt.ylabel(f'Speedup (time_{baseline} / time_strategy)')
     plt.legend(title='Strategy', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/08_speedup.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/08_speedup.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/08_speedup.png")
+    print(f"Saved: {OUTPUT_DIR}/08_speedup.pdf")
 
     # =========================================================================
     # GRAPH 9: VARIANCE COMPARISON (Strategy Stability)
@@ -230,9 +230,9 @@ def generate_performance_plots(csv_file):
     plt.ylabel('Strategy')
     plt.title('Strategy Stability: Variability of Solving Times', fontsize=14)
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/09_stabilita_strategie.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/09_stabilita_strategie.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/09_stabilita_strategie.png")
+    print(f"Saved: {OUTPUT_DIR}/09_stabilita_strategie.pdf")
 
     # =========================================================================
     # GRAPH 10: SCATTER PLOT K vs TIME
@@ -248,9 +248,9 @@ def generate_performance_plots(csv_file):
     setup_log2_scale(plt.gca(), 'y')
     plt.legend(title='Strategy', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/10_k_vs_tempo.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/10_k_vs_tempo.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/10_k_vs_tempo.png")
+    print(f"Saved: {OUTPUT_DIR}/10_k_vs_tempo.pdf")
 
     # =========================================================================
     # GRAPH 11: SUMMARY DASHBOARD
@@ -296,9 +296,9 @@ def generate_performance_plots(csv_file):
 
     plt.suptitle('Benchmark Summary Dashboard', fontsize=16, fontweight='bold')
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/11_dashboard.png", dpi=150)
+    plt.savefig(f"{OUTPUT_DIR}/11_dashboard.pdf", dpi=150)
     plt.close()
-    print(f"Saved: {OUTPUT_DIR}/11_dashboard.png")
+    print(f"Saved: {OUTPUT_DIR}/11_dashboard.pdf")
 
     # =========================================================================
     # FINAL SUMMARY
@@ -309,17 +309,17 @@ def generate_performance_plots(csv_file):
     print(f"Output directory: {OUTPUT_DIR}/")
     print(f"Total graphs: 11")
     print("\nGenerated graphs:")
-    print("  01_tempo_vs_n.png       - Average time vs size (line)")
-    print("  02_successo_vs_n.png    - Solved instances per N (bar)")
-    print("  03_boxplot_tempi.png    - Time distribution by strategy")
-    print("  04_heatmap_tempo.png    - Time heatmap (Strategy x N)")
-    print("  05_heatmap_successo.png - Success % heatmap (Strategy x N)")
-    print("  06_ranking_strategie.png- Strategy ranking by avg time")
-    print("  07_violin_plot.png      - Detailed distribution per N")
-    print("  08_speedup.png          - Relative speedup vs baseline")
-    print("  09_stabilita_strategie.png - Time variability (std dev)")
-    print("  10_k_vs_tempo.png       - K vs Time correlation")
-    print("  11_dashboard.png        - Summary dashboard")
+    print("  01_tempo_vs_n.pdf       - Average time vs size (line)")
+    print("  02_successo_vs_n.pdf    - Solved instances per N (bar)")
+    print("  03_boxplot_tempi.pdf    - Time distribution by strategy")
+    print("  04_heatmap_tempo.pdf    - Time heatmap (Strategy x N)")
+    print("  05_heatmap_successo.pdf - Success % heatmap (Strategy x N)")
+    print("  06_ranking_strategie.pdf- Strategy ranking by avg time")
+    print("  07_violin_plot.pdf      - Detailed distribution per N")
+    print("  08_speedup.pdf          - Relative speedup vs baseline")
+    print("  09_stabilita_strategie.pdf - Time variability (std dev)")
+    print("  10_k_vs_tempo.pdf       - K vs Time correlation")
+    print("  11_dashboard.pdf        - Summary dashboard")
 
 
 def parse_args():
