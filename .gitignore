@@ -1,6 +1,7 @@
 .DS_Store
 results/
 graphs/
+__pycache__/
 
 # Latex
 *.aux
