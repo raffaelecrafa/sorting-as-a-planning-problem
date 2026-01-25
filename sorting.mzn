@@ -60,8 +60,8 @@ constraint forall(p in 1..n) (
     v[0, p] = start_v[p]  % Stato iniziale fissato
 );
 
-constraint forall(p in 1..n-1) (
-    v[k, p] <= v[k, p+1]  % Stato finale ordinato (crescente)
+constraint forall(p in 1..n) (
+    v[k, p] = p  % Stato finale = permutazione identità (più forte di "ordinato")
 );
 
 
@@ -207,6 +207,48 @@ constraint forall(t in 0..k-2) (
         % Se disgiunti, forza ordine lessicografico
         disjoint -> (idx1[t] < idx1[t+1])
     )
+);
+
+
+% =============================================================================
+% VINCOLO 6: FIXED POINT PROPAGATION
+% =============================================================================
+% Scopo: Se un elemento è già nella sua posizione corretta (v[t, p] = p),
+%        quella posizione NON deve essere coinvolta in swap futuri.
+%
+% RAZIONALE:
+% - Un elemento "fissato" (v[t, p] = p) è già al posto giusto
+% - Coinvolgerlo in uno swap lo sposterebbe inutilmente
+% - In un piano ottimo, nessuna mossa "disfa" progresso già fatto
+%
+% EFFETTO: Riduce il branching eliminando mosse inutili
+% =============================================================================
+
+constraint forall(t in 0..k-1, p in 1..n) (
+    v[t, p] = p -> (idx1[t] != p /\ idx2[t] != p)
+);
+
+
+% =============================================================================
+% VINCOLO 7: NO SWAP RIPETUTI (Global Uniqueness)
+% =============================================================================
+% Scopo: Ogni coppia (i, j) può apparire AL MASSIMO UNA VOLTA nel piano.
+%
+% RAZIONALE:
+% - Se (i,j) appare due volte consecutive → si annullano (già vietato dal vincolo 5A)
+% - Se (i,j) appare due volte non consecutive → esiste un piano più corto
+%   (gli swap intermedi potrebbero essere riorganizzati)
+%
+% DIMOSTRAZIONE (sketch):
+%   Se Swap(i,j) appare ai tempi t1 e t2 (t1 < t2), gli elementi in i e j
+%   tornano alle posizioni originali dopo t2. Quindi gli swap tra t1 e t2
+%   avrebbero potuto agire direttamente → piano non ottimo.
+%
+% EFFETTO: Elimina ridondanze globali nel piano
+% =============================================================================
+
+constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
+    idx1[t1] != idx1[t2] \/ idx2[t1] != idx2[t2]
 );
 
 

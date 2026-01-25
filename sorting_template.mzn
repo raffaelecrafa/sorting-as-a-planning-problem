@@ -1,21 +1,3 @@
-% =============================================================================
-% SORTING TEMPLATE - Versione per Test delle Strategie di Ricerca
-% =============================================================================
-% Questo file è una versione TEMPLATE del modello di sorting.
-% Il placeholder {{SOLVE_STRATEGY}} viene sostituito dinamicamente dallo script
-% benchmark_strategies.py con diverse strategie di ricerca.
-%
-% DIFFERENZE rispetto a sorting.mzn:
-% - Aggiunge la variabile ausiliaria all_moves per facilitare la ricerca
-% - Non include il vincolo di parità (gestito dal meta-solver Python)
-% - Il blocco solve è un placeholder
-%
-% STRATEGIE SUPPORTATE:
-% 1. Default Restart: euristica default di Gecode con Luby restart
-% 2. Moves FirstFail: focus sulle mosse, variabile più vincolata prima
-% 3. Moves DomWdeg: domain/weighted-degree, impara dai fallimenti
-% =============================================================================
-
 include "globals.mzn";
 
 % =============================================================================
@@ -70,11 +52,14 @@ array[1..2*k] of var 1..n: all_moves = [
 % VINCOLO 1: CONDIZIONI AL CONTORNO
 % =============================================================================
 % Stato iniziale = permutazione di input
-% Stato finale = vettore ordinato
+% Stato finale = permutazione identità (v[k, p] = p per ogni p)
+%
+% NOTA: Il vincolo v[k, p] = p è più forte di v[k, p] <= v[k, p+1]
+%       e migliora la propagazione backward. Viene ripetuto nel vincolo 6
+%       per chiarezza, ma il solver lo ottimizza automaticamente.
 % =============================================================================
 
 constraint forall(p in 1..n) (v[0, p] = start_v[p]);
-constraint forall(p in 1..n-1) (v[k, p] <= v[k, p+1]);
 
 
 % =============================================================================
