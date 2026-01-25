@@ -96,7 +96,7 @@ def generate_performance_plots(csv_file):
     # Filter only solved instances to avoid timeouts distorting the graph
     df_solved = df[df['Status'] == 'OK']
 
-    sns.boxplot(data=df_solved, x='Strategy', y='Time', palette=palette)
+    sns.boxplot(data=df_solved, x='Strategy', y='Time', hue='Strategy', palette=palette, legend=False)
     plt.title('Distribution of Solving Times by Strategy', fontsize=14)
     plt.xlabel('Strategy')
     plt.ylabel('Time (seconds)')
