@@ -2,7 +2,7 @@
 
 This repository contains the implementation of **Project 5** for the **Constraint Programming** course (2025). The project explores modeling the sorting of a vector as a discrete-time planning problem, identifying the minimum sequence of pairwise swaps required to reach a sorted state.
 
-## 📋 Project Overview
+## Project Overview
 
 The objective is to find the **minimum plan length $k$** to sort a permutation of $N$ integers. While basic CP models struggle with the combinatorial explosion of planning horizons, this solution implements state-of-the-art optimizations to achieve high performance even for $N=30$.
 
@@ -16,7 +16,7 @@ The objective is to find the **minimum plan length $k$** to sort a permutation o
 - **Theoretical Lower Bounds**: Uses **Cycle Decomposition** to jump directly to the mathematically minimum possible $k$, bypassing the expensive UNSAT phase.
 - **12 Search Strategies**: Comprehensive benchmarking of variable/value selection heuristics and restart policies.
 
-## 📂 Repository Structure
+## Repository Structure
 
 | File | Role |
 | :--- | :--- |
@@ -26,7 +26,7 @@ The objective is to find the **minimum plan length $k$** to sort a permutation o
 | `benchmark_strategies.py` | Advanced experimental engine with 12 search strategies. |
 | `plot.py` | Data visualization script (generates 11 different charts). |
 
-## 🛠 Prerequisites
+## Prerequisites
 
 ### 1. MiniZinc & Solver
 - [MiniZinc](https://www.minizinc.org/) (tested on v2.8+)
@@ -38,7 +38,7 @@ The meta-solver requires Python 3.10+ and the following libraries:
 pip install -r requirements.txt
 ```
 
-## 🚀 Execution Workflow
+## Execution Workflow
 
 ### 1. Basic Benchmark
 Run the basic benchmark to verify the correctness of the sorting.mzn model:
@@ -115,7 +115,7 @@ python plot.py results/2026-01-24_14-30-45/summary_2026-01-24_14-30-45.csv
 | `10_k_vs_tempo.png` | Correlation between plan length K and time |
 | `11_dashboard.png` | Summary dashboard (4-in-1) |
 
-## 🧠 Core Optimization Logic
+## Core Optimization Logic
 
 The efficiency of this project relies on three pillars of Constraint Programming:
 
@@ -125,7 +125,7 @@ The efficiency of this project relies on three pillars of Constraint Programming
 
 3. **Mathematical Pruning**: The Parity Constraint ensures that the solver never explores even k values for odd permutations (and vice-versa), effectively halving the search space during the "UNSAT" phase.
 
-## 📊 Output Structure
+## Output Structure
 
 ```
 results/
