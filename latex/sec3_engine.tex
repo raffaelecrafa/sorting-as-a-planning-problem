@@ -1,15 +1,95 @@
 \section{The Benchmark Engine: \texttt{benchmark.py}}
-MiniZinc cannot optimize the size of the transition matrix dynamically. \texttt{benchmark.py} acts as a meta-solver implementing \textbf{Iterative Deepening}.
 
-\subsection{Iterative Search and Timeout}
+MiniZinc solves problems for a \textbf{fixed} horizon $k$. To find the \textit{minimum} $k$, we need an external controller. The script \texttt{benchmark.py} acts as a \textbf{meta-solver} implementing Iterative Deepening with intelligent lower bound computation.
+
+\subsection{Benchmark Suite Generation}
+
+Following the project specification, we generate 60 benchmark instances:
+
 \begin{lstlisting}[language=Python]
-while not found:
-    instance = minizinc.Instance(solver, model)
-    instance["k"] = k
-    result = instance.solve(timeout=timedelta(seconds=TIMEOUT_SEC))
-    if result.status == minizinc.Status.SATISFIED:
-        return k, result
-    elif result.status == minizinc.Status.UNSATISFIABLE:
-        k += 1
+def generate_benchmarks():
+    benchmarks = []
+    sizes = [5, 10, 15, 20, 25, 30]  # As per specification
+    for n in sizes:
+        for _ in range(10):  # 10 permutations per size
+            vec = list(range(1, n + 1))
+            random.shuffle(vec)
+            benchmarks.append((n, vec))
+    return benchmarks
 \end{lstlisting}
-\textbf{Explanation:} The script tests $k=1, 2, \dots$ sequentially. Since our model is optimal-length-constrained, the first $k$ that returns SATISFIED is mathematically the minimum plan length. A cumulative timeout of 300s is enforced to handle NP-hard instances.
+
+This produces:
+\begin{itemize}
+    \item 10 instances for $N=5$ (instances 1--10)
+    \item 10 instances for $N=10$ (instances 11--20)
+    \item 10 instances for $N=15$ (instances 21--30)
+    \item 10 instances for $N=20$ (instances 31--40)
+    \item 10 instances for $N=25$ (instances 41--50)
+    \item 10 instances for $N=30$ (instances 51--60)
+\end{itemize}
+
+\subsection{Cycle Decomposition for Lower Bound}
+
+Instead of starting with $k=1$ and incrementing blindly, we compute the theoretical minimum using cycle decomposition:
+
+\begin{lstlisting}[language=Python]
+def count_cycles(perm):
+    n = len(perm)
+    visited = [False] * n
+    num_cycles = 0
+    for i in range(n):
+        if not visited[i]:
+            num_cycles += 1
+            j = i
+            while not visited[j]:
+                visited[j] = True
+                j = perm[j] - 1  # Follow the cycle
+    return num_cycles
+
+def compute_starting_k(perm):
+    n = len(perm)
+    num_cycles = count_cycles(perm)
+    k_min = n - num_cycles  # Theoretical lower bound
+
+    # Parity correction
+    initial_inv = count_inversions(perm)
+    if (k_min % 2) != (initial_inv % 2):
+        k_min += 1
+    return k_min
+\end{lstlisting}
+
+The cycle decomposition gives us the exact minimum for most permutations. The parity check ensures we don't start with an impossible $k$ value (which would waste one iteration).
+
+\subsection{Iterative Deepening with Intelligent Start}
+
+\begin{lstlisting}[language=Python]
+def solve_sorting_instance(model, solver, n, start_v):
+    # Start from theoretical lower bound, not k=1
+    k = compute_starting_k(start_v)
+
+    while not found:
+        instance = minizinc.Instance(solver, model)
+        instance["n"] = n
+        instance["start_v"] = start_v
+        instance["k"] = k
+
+        result = instance.solve(timeout=timedelta(seconds=300))
+
+        if result.status == minizinc.Status.SATISFIED:
+            return k, result  # Found optimal!
+        elif result.status == minizinc.Status.UNSATISFIABLE:
+            k += 1  # Try longer plan
+\end{lstlisting}
+
+\textbf{Optimization impact:} For $N=30$, a random permutation typically has $k_{\min} \approx 25$. Without cycle decomposition, the solver would waste time on 24 UNSAT iterations. With it, we often find the solution on the first attempt.
+
+\subsection{Output Format}
+
+Results are saved to individual text files in \texttt{result\_benchmark/}:
+\begin{lstlisting}[language=Python]
+def save_result_to_file(index, n, vec, k, time_taken, result):
+    filename = f"result_{index:02d}_N{n}.txt"
+    # Writes: dimension, input vector, K found, time, plan steps
+\end{lstlisting}
+
+Each file contains the complete solution trace, including every swap performed and the resulting intermediate states.

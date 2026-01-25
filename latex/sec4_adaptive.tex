@@ -1,17 +1,157 @@
-\section{The Adaptive Model: \texttt{sorting\_template.mzn}}
-\subsection{Structural Identity}
-\texttt{sorting\_template.mzn} shares the exact same logical constraints as the base model (\texttt{inverse}, \texttt{parity}, \texttt{group theory swaps}). This ensures that any performance difference observed during benchmarking is strictly attributed to the search strategy and not to model discrepancies.
+\section{Search Strategies and Template Model}
 
-\subsection{Architectural Differences}
-The template introduces two key changes for meta-programming:
-\begin{enumerate}
-    \item \textbf{Decision Array Aggregation:} 
-    \begin{lstlisting}[language=C]
-    array[1..2*k] of var 1..n: all_moves = [
-        if i mod 2 == 1 then idx1[i div 2] else idx2[(i-1) div 2] endif | i in 1..2*k
-    ];
-    \end{lstlisting}
-    Search heuristics like \textit{FirstFail} require a single array. By interleaving \texttt{idx1} and \texttt{idx2}, we force the solver to decide a complete move $(idx1_t, idx2_t)$ before moving to $t+1$, preventing incoherent branching.
-    
-    \item \textbf{Heuristic Injection:} The \texttt{solve} command is replaced by the \texttt{\{\{SOLVE\_STRATEGY\}\}} placeholder, allowing the Python script to inject annotations like \texttt{dom\_w\_deg} dynamically.
-\end{enumerate}
+To systematically compare different search strategies, we created \texttt{sorting\_template.mzn}, which is \textbf{identical} to \texttt{sorting.mzn} with two differences: (1) the \texttt{solve} statement is replaced by a placeholder \texttt{\{\{SOLVE\_STRATEGY\}\}} for dynamic strategy injection, and (2) an auxiliary array \texttt{all\_moves} is defined to aggregate the decision variables.
+
+The array \texttt{all\_moves} interleaves \texttt{idx1} and \texttt{idx2} as follows:
+\begin{lstlisting}[language=C]
+array[1..2*k] of var 1..n: all_moves = [
+    if i mod 2 == 1
+    then idx1[i div 2]
+    else idx2[(i-1) div 2]
+    endif
+    | i in 1..2*k
+];
+\end{lstlisting}
+This produces the sequence $[idx1_0, idx2_0, idx1_1, idx2_1, \ldots, idx1_{k-1}, idx2_{k-1}]$. By alternating the swap indices, the solver decides a complete move $(idx1_t, idx2_t)$ before advancing to the next timestep, which is more natural for this problem than the simple concatenation \texttt{idx1 ++ idx2}.
+
+The Python script \texttt{benchmark\_strategies.py} reads the template, replaces the placeholder with the desired search strategy, and writes a temporary model file for execution. This meta-programming approach allows testing multiple strategies without modifying the core model.
+
+Each strategy is a combination of three components: (1) a \textbf{variable selection heuristic} that determines which variable to branch on next, (2) a \textbf{value selection heuristic} that determines which value to try first, and (3) a \textbf{restart policy} that determines when to abandon the current search path.
+
+\subsection{Variable Selection Heuristics}
+
+\subsubsection{Default (Gecode's Internal Heuristic)}
+
+When no explicit heuristic is specified, Gecode uses its internal variable ordering, typically equivalent to \texttt{input\_order} with \texttt{indomain\_min}. This serves as our baseline for comparison.
+
+\begin{lstlisting}[language=C]
+solve :: restart_luby(250) satisfy;
+\end{lstlisting}
+
+\subsubsection{First-Fail}
+
+The \texttt{first\_fail} heuristic selects the variable with the smallest domain. The intuition is that variables with small domains are more constrained and likely to cause failures—by branching on them first, the solver detects inconsistencies early and avoids exploring large barren subtrees.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, first_fail, indomain_random, complete)
+\end{lstlisting}
+
+\paragraph{Example.} Consider two move variables at time $t=0$ and $t=1$. After constraint propagation, suppose $D(idx1_0) = \{1,2,3,4,5\}$ and $D(idx1_1) = \{2,3\}$. The heuristic selects $idx1_1$ first because its domain has only 2 values. If this choice leads to a conflict, the solver discovers it immediately rather than after exploring all 5 possibilities for $idx1_0$.
+
+\subsubsection{Domain/Weighted Degree}
+
+The \texttt{dom\_w\_deg} heuristic selects the variable that minimizes $\frac{|D(x)|}{w(x)}$, where $w(x)$ is the \textit{weighted degree}—a counter that tracks how many times constraints involving $x$ have caused failures during search. Unlike static heuristics, \texttt{dom\_w\_deg} \textbf{learns from failures}, adapting its variable ordering to the specific instance.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, dom_w_deg, indomain_random, complete)
+\end{lstlisting}
+
+\paragraph{Example.} Initially, all weights are equal and the heuristic behaves like \texttt{first\_fail}. Suppose the constraint \texttt{v[t, idx2[t]] = idx1[t]} frequently causes failures when $idx2_0 = 3$. The weight of $idx2_0$ increases, making it more likely to be selected early. Over time, the solver ``learns'' that certain variables are problematic and prioritizes them.
+
+\subsubsection{Smallest}
+
+The \texttt{smallest} heuristic selects the variable whose minimum domain value is smallest. Combined with \texttt{indomain\_min}, this creates a deterministic, reproducible search that prefers low indices.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, smallest, indomain_min, complete)
+\end{lstlisting}
+
+\paragraph{Example.} If $D(idx1_0) = \{3,4,5\}$ and $D(idx1_1) = \{1,2\}$, the heuristic selects $idx1_1$ because its minimum value (1) is smaller than the minimum of $idx1_0$ (3).
+
+\subsubsection{Most Constrained}
+
+The \texttt{most\_constrained} heuristic works like \texttt{first\_fail} but breaks ties by selecting the variable involved in the most constraints. This prioritizes variables that are both tightly bounded and highly connected in the constraint graph.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, most_constrained, indomain_random, complete)
+\end{lstlisting}
+
+\paragraph{Example.} Suppose $idx1_0$ and $idx2_0$ both have domain size 2. However, $idx1_0$ appears in 5 constraints while $idx2_0$ appears in 3. The heuristic selects $idx1_0$ because it is more ``central'' to the constraint network.
+
+\subsubsection{Max Regret}
+
+The \texttt{max\_regret} heuristic selects the variable where the difference between the best and second-best value is largest. The intuition is that if one value is clearly superior, the decision is ``critical''—making the wrong choice is costly, so the solver should resolve it early.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, max_regret, indomain_random, complete)
+\end{lstlisting}
+
+\paragraph{Example.} Consider a scheduling-like scenario where choosing $idx1_0 = 2$ would satisfy 4 constraints immediately, while $idx1_0 = 3$ would only satisfy 1. The ``regret'' of not choosing 2 is high (3 constraints lost), so the heuristic prioritizes this variable.
+
+\subsubsection{Anti First-Fail}
+
+The \texttt{anti\_first\_fail} heuristic is the opposite of \texttt{first\_fail}: it selects the variable with the largest domain. This is useful when early commitment to constrained variables leads to thrashing, as it allows more propagation to occur before making critical decisions.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, anti_first_fail, indomain_random, complete)
+\end{lstlisting}
+
+\paragraph{Example.} If $D(idx1_0) = \{1,2,3,4,5\}$ and $D(idx1_1) = \{2,3\}$, the heuristic selects $idx1_0$ first. By assigning the less constrained variable, constraint propagation may further reduce $D(idx1_1)$ before the solver commits to a value.
+
+\subsection{Value Selection Heuristics}
+
+\subsubsection{Random Selection}
+
+The \texttt{indomain\_random} heuristic selects a random value from the domain. Combined with restarts, this provides diversification—different restart iterations explore different parts of the search space, reducing the probability of getting stuck.
+
+\subsubsection{Minimum Value}
+
+The \texttt{indomain\_min} heuristic always selects the smallest value in the domain. This is deterministic and reproducible, but may get stuck without restarts if the optimal solution requires larger values.
+
+\subsubsection{Domain Splitting}
+
+The \texttt{indomain\_split} heuristic does not enumerate individual values. Instead, it bisects the domain: first try $x \leq \text{mid}$, then $x > \text{mid}$. This achieves logarithmic depth instead of linear.
+
+\begin{lstlisting}[language=C]
+int_search(all_moves, dom_w_deg, indomain_split, complete)
+\end{lstlisting}
+
+\paragraph{Example.} For a variable with domain $\{1, \ldots, 30\}$, traditional enumeration might try up to 30 values. With binary splitting, the solver reaches any value in at most $\lceil \log_2 30 \rceil = 5$ decisions.
+
+\subsection{Restart Policies}
+
+\subsubsection{Luby Restart}
+
+The Luby sequence is $1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 2, 4, 8, \ldots$ With \texttt{restart\_luby(250)}, the solver restarts after $250 \times L$ failures, where $L$ is the current Luby number. This sequence is proven to be \textbf{universally optimal} for randomized algorithms—no other restart sequence is asymptotically better.
+
+\subsubsection{Geometric Restart}
+
+With \texttt{restart\_geometric(1.5, 100)}, the restart sequence is $100, 150, 225, 337, \ldots$ (multiply by 1.5 each iteration). This starts aggressively with short restarts and becomes more patient over time.
+
+\subsubsection{Linear Restart}
+
+With \texttt{restart\_linear(250)}, the restart sequence is $250, 500, 750, 1000, \ldots$ (add 250 each iteration). This provides predictable, steady growth but is less adaptive than Luby.
+
+\subsubsection{No Restart}
+
+Without any restart annotation, the solver performs complete enumeration. This can be effective for small instances but risks getting stuck in barren subtrees for larger problems.
+
+\subsection{Complete Strategy List}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|c|l|l|l|l|}
+\hline
+\textbf{\#} & \textbf{Name} & \textbf{Variable} & \textbf{Value} & \textbf{Restart} \\
+\hline
+1 & default & (Gecode) & (Gecode) & Luby(250) \\
+2 & firstfail & first\_fail & random & Luby(250) \\
+3 & domwdeg & dom\_w\_deg & random & Luby(250) \\
+4 & smallest & smallest & min & Luby(250) \\
+5 & mostconstrained & most\_constrained & random & Luby(250) \\
+6 & maxregret & max\_regret & random & Luby(250) \\
+7 & antifirstfail & anti\_first\_fail & random & Luby(250) \\
+8 & domwdeg\_split & dom\_w\_deg & split & Luby(250) \\
+9 & firstfail\_split & first\_fail & split & Luby(250) \\
+10 & geometric & dom\_w\_deg & random & Geometric(1.5, 100) \\
+11 & linear & dom\_w\_deg & random & Linear(250) \\
+12 & norestart & dom\_w\_deg & random & None \\
+\hline
+\end{tabular}
+\caption{All 12 search strategies tested}
+\end{table}
+
+\subsection{Parallel Execution}
+
+To reduce benchmark time, strategies are executed in parallel using Python's \texttt{ThreadPoolExecutor}. Each strategy runs in its own thread, allowing simultaneous comparison on the same instance. Results are written to a shared CSV file with thread-safe locking.

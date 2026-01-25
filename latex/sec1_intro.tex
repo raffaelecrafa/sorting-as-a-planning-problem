@@ -1,17 +1,72 @@
 \section{Introduction}
-his project addresses the "Sorting as a Planning Problem". The objective is to find the \textbf{minimum length plan} (sequence of actions) required to sort a vector of integers $\vec{v}$ using only pairwise swaps. The problem is modeled as a Constraint Satisfaction Problem (CSP) where the solver must determine the optimal sequence of $k$ moves to transition from an initial unsorted state to a sorted goal state.
 
-To achieve this, a hybrid architecture was developed using \textbf{MiniZinc} for the logical modeling of constraints and \textbf{Python} as a meta-solver to handle the dynamic optimization of the plan length.
+This project addresses \textbf{Project 5: Sorting as a Planning Problem}. Given a vector $\vec{v} = [v_1, \ldots, v_n]$ representing a permutation of integers $\{1, \ldots, n\}$, the objective is to find the \textbf{minimum number of pairwise swaps} required to sort it in ascending order.
 
-The project is structured as follows.
+A \texttt{swap(i, j)} operation exchanges the values at positions $i$ and $j$: after the swap, $v[i]$ and $v[j]$ are interchanged. The problem asks for the \textbf{minimum length plan}—the shortest sequence of swaps—that transforms the initial permutation into the sorted sequence $[1, 2, \ldots, n]$.
+
+\subsection{Problem Formalization}
+
+The problem can be formally stated as follows:
+\begin{itemize}
+    \item \textbf{Input:} A permutation $\vec{v} = [v_1, \ldots, v_n]$ of integers from $1$ to $n$.
+    \item \textbf{Output:} A sequence of swaps $\langle \text{swap}(i_1, j_1), \text{swap}(i_2, j_2), \ldots, \text{swap}(i_k, j_k) \rangle$ of minimum length $k$ such that applying these swaps in order produces the sorted sequence $[1, 2, \ldots, n]$.
+\end{itemize}
+
+\paragraph{Example}
+
+Consider the permutation $\vec{v} = [2, 3, 1, 5, 4]$ of size $n=5$:
+\begin{itemize}
+    \item \textbf{Initial state:} $[2, 3, 1, 5, 4]$
+    \item \textbf{Step 1:} $\text{swap}(1, 2)$ $\rightarrow$ $[3, 2, 1, 5, 4]$ (swap positions 1 and 2)
+    \item \textbf{Step 2:} $\text{swap}(1, 3)$ $\rightarrow$ $[1, 2, 3, 5, 4]$ (swap positions 1 and 3)
+    \item \textbf{Step 3:} $\text{swap}(4, 5)$ $\rightarrow$ $[1, 2, 3, 4, 5]$ (swap positions 4 and 5)
+\end{itemize}
+The minimum plan length is $k=3$. No sequence of fewer than 3 swaps can sort this permutation.
+
+\subsection{Sorting as a Planning Problem}
+
+This problem naturally maps to a \textbf{discrete planning problem}:
+\begin{itemize}
+    \item \textbf{State:} The current configuration of the vector at each timestep $t$.
+    \item \textbf{Action:} A swap operation $\text{swap}(i, j)$ that modifies the state.
+    \item \textbf{Initial State:} The input permutation $\vec{v}$.
+    \item \textbf{Goal State:} The sorted sequence $[1, 2, \ldots, n]$.
+    \item \textbf{Horizon:} The number of timesteps $k$ (plan length).
+\end{itemize}
+
+The problem is modeled as a \textbf{Constraint Satisfaction Problem (CSP)} where, for a fixed horizon $k$, the solver must determine whether a valid plan exists. The minimum $k$ is found via \textbf{Iterative Deepening}: we start with $k=k_{\min}$ (a theoretical lower bound) and increment $k$ until a satisfiable solution is found.
+
+\subsection{Theoretical Lower Bound: Cycle Decomposition}
+
+From \textbf{Group Theory}, every permutation can be decomposed into disjoint cycles. The minimum number of swaps required to sort a permutation is:
+\begin{equation}
+    k_{\min} = n - c
+\end{equation}
+where $c$ is the number of disjoint cycles in the permutation.
+
+\paragraph{Cycle Decomposition.} Any permutation can be decomposed into disjoint \textbf{cycles}. A cycle describes a closed chain of positions where elements need to ``rotate'' to reach their correct places. To find cycles, we start at position $i$, follow the chain $i \to v[i] \to v[v[i]] \to \cdots$ until returning to $i$, then repeat for unvisited positions.
+
+\paragraph{Example.} For $\vec{v} = [2, 3, 1, 5, 4]$:
+\begin{itemize}
+    \item \textbf{Cycle 1:} $1 \to 2 \to 3 \to 1$ (positions 1, 2, 3 form a cycle of length 3)
+    \item \textbf{Cycle 2:} $4 \to 5 \to 4$ (positions 4, 5 form a cycle of length 2)
+\end{itemize}
+Total: $c = 2$ cycles.
+
+\paragraph{Minimum Swaps.} A cycle of length $\ell$ requires exactly $\ell - 1$ swaps to sort. Therefore:
+\[
+k_{\min} = \sum_{i=1}^{c} (\ell_i - 1) = n - c
+\]
+For our example: $(3-1) + (2-1) = 3$ swaps, matching $k_{\min} = 5 - 2 = 3$.
 
 \subsection{Project Structure}
-he project implementation is distributed across four distinct files, each serving a specific role in the solution architecture:
+
+The project implementation is distributed across five files:
 \begin{enumerate}
-    \item \textbf{\texttt{sorting.mzn}}: The core CSP model of the project. It defines the problem in terms of variables and mathematical constraints for a fixed time horizon k. It describes the state of the vector $\vec{v}$ at each instant $t$ (from $0$ to $k$) and the rules for switching from one state to another via \textit{swaps}.
-    \item \textbf{\texttt{benchmark.py}}: A Python script acting as a meta-solver. This script creates all the benchmarks and implements an \textit{Iterative Deepening} loop, incrementing the plan length $k$ until a valid solution is found.
-    \item \textbf{\texttt{sorting\_template.mzn}}: A parameterized version of the base model \texttt{sorting.mzn} that enables the dynamic injection of search strategies.
-    \item \textbf{\texttt{benchmark\_strategies.py}}: The experimental suite used to compare different search heuristics and measure their impact on the solver's performance for complex instances.
-    \item \textbf{\texttt{plot.py}}: A script that shows a graphical display of the results
+    \item \textbf{\texttt{sorting.mzn}}: The core MiniZinc model defining variables, constraints, and the search strategy for a fixed horizon $k$.
+    \item \textbf{\texttt{benchmark.py}}: A Python meta-solver implementing Iterative Deepening with cycle-based lower bound computation.
+    \item \textbf{\texttt{sorting\_template.mzn}}: An extended version of the base model with a placeholder for dynamic strategy injection.
+    \item \textbf{\texttt{benchmark\_strategies.py}}: The experimental suite for comparing 12 different search heuristics.
+    \item \textbf{\texttt{plot.py}}: A visualization script for graphical analysis of benchmark results.
 \end{enumerate}
 

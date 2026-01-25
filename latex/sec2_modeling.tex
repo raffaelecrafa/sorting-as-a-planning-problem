@@ -1,109 +1,128 @@
-\section{Problem Modeling: \texttt{sorting.mzn}} The core logical model is implemented in \texttt{sorting.mzn}. The problem is framed as a discrete-time state-transition system where a vector v of size n must be transformed into a sorted configuration within exactly k steps. To ensure the solver can handle high-dimensional instances (N=30), the model integrates advanced propagation techniques and mathematical properties of permutations.
+\section{Problem Modeling: \texttt{sorting.mzn}}
 
-\subsection{Parameters and Decision Variables} A rigorous definition of the search space is provided through the following parameters and variables:
+The core logical model is implemented in \texttt{sorting.mzn}. The problem is framed as a discrete-time state-transition system where a vector $\vec{v}$ of size $n$ must be transformed into a sorted configuration within exactly $k$ steps. To ensure the solver can handle high-dimensional instances ($N=30$), the model integrates advanced propagation techniques and mathematical properties of permutations.
 
-\begin{lstlisting}[language=C] int: n;
+\subsection{MiniZinc Overview}
 
-array[1..n] of int: start_v; int: k;
+MiniZinc is a high-level constraint modeling language that separates the problem specification from the solver implementation. Key features used in this project include:
+\begin{itemize}
+    \item \textbf{Global Constraints:} Predefined constraints like \texttt{alldifferent} and \texttt{inverse} that have specialized propagation algorithms.
+    \item \textbf{Annotations:} Hints to the solver about propagation levels (e.g., \texttt{:: domain} for Generalized Arc Consistency) and search strategies.
+    \item \textbf{Solver Independence:} The same model can be solved by different backends (Gecode, Chuffed, OR-Tools).
+\end{itemize}
 
-\end{lstlisting} 
+\subsection{Parameters and Decision Variables}
+
+A rigorous definition of the search space is provided through the following parameters and variables:
+
+\begin{lstlisting}[language=C]
+int: n;
+array[1..n] of int: start_v;
+int: k;
+\end{lstlisting}
+
 The parameters \texttt{n} and \texttt{start\_v} define the instance size and the initial unsorted state. The parameter \texttt{k} represents the fixed planning horizon. In our architecture, \texttt{k} is controlled by the Python meta-solver to find the minimum plan length.
 
-\begin{lstlisting}[language=C] 
-array[0..k, 1..n] of var 1..n: v; 
-array[0..k, 1..n] of var 1..n: pos; 
-\end{lstlisting} 
-We declare two 2D matrices to represent the state of the system at each time step $t \in [0,k]$. 
-\begin{itemize} 
+\begin{lstlisting}[language=C]
+array[0..k, 1..n] of var 1..n: v;
+array[0..k, 1..n] of var 1..n: pos;
+\end{lstlisting}
+
+We declare two 2D matrices to represent the state of the system at each time step $t \in [0,k]$.
+\begin{itemize}
     \item \texttt{v[t,p]}: The value contained in position p at time t. \item \texttt{pos[t,i]}: The position of value i at time t.
-\end{itemize} 
+\end{itemize}
 \textbf{Motivation:} This is a \textbf{Dual Modeling} approach (also known as \textbf{Channeling}). By representing the same state in two ways, the solver can propagate information bidirectionally. For example, assigning a value to a position in \texttt{v} immediately restricts the domain of the corresponding entry in \texttt{pos}. In this way we are combining two points of view.
 
-\begin{lstlisting}[language=C] 
-array[0..k-1] of var 1..n: idx1; 
-array[0..k-1] of var 1..n: idx2; 
-\end{lstlisting} 
+\begin{lstlisting}[language=C]
+array[0..k-1] of var 1..n: idx1;
+array[0..k-1] of var 1..n: idx2;
+\end{lstlisting}
 These are the action variables. For each transition from t to t+1, the solver must decide the pair of indices ($idx1_t$,$idx2_t$) to be swapped.
 
-\subsection{Initial, Goal, and Parity Constraints} The boundary conditions and mathematical invariants of the problem are enforced here:
+\subsection{Initial, Goal, and Parity Constraints}
+The boundary conditions and mathematical invariants of the problem are enforced here:
 
-\begin{lstlisting}[language=C] 
-constraint forall(p in 1..n) (v[0, p] = start_v[p]); 
-constraint forall(p in 1..n-1) (v[k, p] <= v[k, p+1]); 
-\end{lstlisting} 
-The first constraint initializes the state at t=0 using the input data. The second constraint defines the \textbf{Goal State}: at time t=k, the vector must be sorted in non-descending order.
+\begin{lstlisting}[language=C]
+constraint forall(p in 1..n) (v[0, p] = start_v[p]);
+constraint forall(p in 1..n) (v[k, p] = p);
+\end{lstlisting}
+The first constraint initializes the state at t=0 using the input data. The second constraint defines the \textbf{Goal State}: at time t=k, the vector must be the identity permutation $[1, 2, \ldots, n]$. This is stronger than simply requiring ascending order, as it provides better backward propagation—the solver knows exactly what value each position must contain at the final timestep.
 
-\begin{lstlisting}[language=C] 
-int: initial_inv = sum(i, j in 1..n where i < j)(bool2int(start_v[i] > start_v[j])); 
-constraint (k mod 2) == (initial_inv mod 2); 
-\end{lstlisting} 
+\begin{lstlisting}[language=C]
+int: initial_inv = sum(i, j in 1..n where i < j)(
+    bool2int(start_v[i] > start_v[j])
+);
+constraint (k mod 2) == (initial_inv mod 2);
+\end{lstlisting}
 This constraint calculates the number of inversions in the initial permutation. That's because, in Group Theory, every swap (transposition) changes the parity of a permutation. Therefore, if the initial state requires an odd number of swaps to be reached, any even $k$ is mathematically impossible (and viceversa, if we have an even number of swaps to do, any odd $k$ is mathematically impossible). By enforcing this \textbf{Parity Invariant}, the solver can return \texttt{UNSAT} for half of the iterative deepening steps during the flattening phase, significantly reducing the total benchmarking time.
 
-\subsection{Channeling and Global Propagation} To maximize the inferential power of the solver, we link the dual representations:
+\subsection{Channeling and Global Propagation}
+To maximize the inferential power of the solver, we link the dual representations:
 
-\begin{lstlisting}[language=C] 
-constraint forall(t in 0..k) ( 
+\begin{lstlisting}[language=C]
+constraint forall(t in 0..k) (
     inverse([v[t, p] | p in 1..n], [pos[t, i] | i in 1..n]) /\
-    alldifferent([v[t, p] | p in 1..n]) :: domain 
-); 
-\end{lstlisting} 
-The \texttt{inverse} global constraint ensures that $v[t,p]=i\iff pos[t,i]=p$. We are enforcing \textbf{Generalized Arc Consistency (GAC)} via \texttt{:: domain} on the \texttt{alldifferent} constraint, that is much more powerful than simple binary decomposition. Combined with channeling, it allows Gecode to detect conflicts by looking at the "available slots" for values, pruning entire branches of the search tree before any value is assigned. To better understand GAC we can see the following example: 
+    alldifferent([v[t, p] | p in 1..n]) :: domain
+);
+\end{lstlisting}
+The \texttt{inverse} global constraint ensures that $v[t,p]=i\iff pos[t,i]=p$. We are enforcing \textbf{Generalized Arc Consistency (GAC)} via \texttt{:: domain} on the \texttt{alldifferent} constraint, that is much more powerful than simple binary decomposition. Combined with channeling, it allows Gecode to detect conflicts by looking at the "available slots" for values, pruning entire branches of the search tree before any value is assigned. To better understand GAC we can see the following example:
 
-Let's consider a subset of the vector at time $t$ with three variables $v_1$,$v_2$,$v_3$ and the following domains 
-\begin{itemize} 
-    \item $D(v_1)=\{1,2\}$ 
-    \item $D(v_2)=\{1,2\}$ 
-    \item $D(v_3)=\{1,2,3\}$ 
+Let's consider a subset of the vector at time $t$ with three variables $v_1$,$v_2$,$v_3$ and the following domains:
+\begin{itemize}
+    \item $D(v_1)=\{1,2\}$
+    \item $D(v_2)=\{1,2\}$
+    \item $D(v_3)=\{1,2,3\}$
 \end{itemize}
 Applying the global constraint \texttt{alldifferent($v_1$,$v_2$,$v_3$)} leads to different results depending on the consistency level:
-\begin{enumerate} 
+\begin{enumerate}
     \item \textbf{Binary Arc Consistency (AC):} If the solver decomposes the global constraint into binary inequalities ($v_1=v_2$, $v_1=v_3$, $v_2=v_3$), it will fail to prune the domains. For instance, for $v_3=1$, there exists a valid assignment for $v_1$ ($v_1=2$) and $v_2$ (though $v_2$ would be restricted, binary AC does not "see" the simultaneous pressure on values $1$ and $2$). Thus, no values are removed from D($v_3$).
     \item \textbf{Generalized Arc Consistency (GAC):} GAC analyzes all variables simultaneously. It identifies that the set $\{v_1, v_2\}$ constitutes a "Hall set" of size 2, requiring two values $\{1, 2\}$. Consequently, these values are mathematically unavailable for any other variable in the constraint. GAC instantly prunes 1 and 2 from $D(v_3)$, resulting in $D(v_3) = \{3\}$.
 \end{enumerate}
 In our sorting model, where N can be as large as 30, the ability to prune values before starting the search tree (branching) is vital. By using \texttt{alldifferent :: domain}, we enforce the solver to use Régin's algorithm, which identifies these bottlenecks immediately. Combined with \textbf{Channeling}, this ensures that the solver never explores permutations that are logically impossible, transforming an exponential search into a highly efficient deductive process.
 
-\subsection{Transition Logic and Optimal Search Pruning} 
+\subsection{Transition Logic and Optimal Search Pruning}
 This section defines the physics of the environment and applies aggressive pruning based on the properties of minimal plans.
 
-\begin{lstlisting}[language=C] 
-constraint forall(t in 0..k-1) ( 
+\begin{lstlisting}[language=C]
+constraint forall(t in 0..k-1) (
     idx1[t] < idx2[t] /\
-    
-    % In an optimal plan, each exchange fixes at least one element
+
     (v[t, idx2[t]] = idx1[t] \/ v[t, idx1[t]] = idx2[t]) /\
-    
+
     v[t+1, idx1[t]] = v[t, idx2[t]] /\
     v[t+1, idx2[t]] = v[t, idx1[t]] /\
+
     forall(p in 1..n where p != idx1[t] /\ p != idx2[t]) (
         v[t+1, p] = v[t, p]
     )
-); 
-\end{lstlisting} 
+);
+\end{lstlisting}
 What are we doing with the code section above:
-\begin{enumerate} 
-    \item \textbf{Canonical Representation:} \texttt{idx1[t] < idx2[t]} prevents the solver from considering swap(2,1) as different from swap(1,2), halving the branching factor. 
-    \item \textbf{Optimal Swap Property:} The constraint \texttt{(v[t, idx2[t]] = idx1[t] \textbackslash/ v[t, idx1[t]] = idx2[t])} is the most significant optimization. In a minimum-length plan for the sorting problem, it is never optimal to make a swap that doesn't put at least one element into its correct final position. This \textbf{Local Optimality} constraint reduces the possible choices at each step from $O(N^2)$ to approximately $O(N)$, allowing the model to scale to N=30. 
-    \item \textbf{State Transition:} The third and fourth constraints (lines 7 and 8 of the above code) define the exchange of values between t and t+1. 
-    \item \textbf{Frame Axiom:} The nested \texttt{forall} ensures that all values not involved in the swap remain static. Without this, the solver could "teleport" values between steps. 
+\begin{enumerate}
+    \item \textbf{Canonical Representation:} \texttt{idx1[t] < idx2[t]} prevents the solver from considering swap(2,1) as different from swap(1,2), halving the branching factor.
+    \item \textbf{Optimal Swap Property:} The constraint at line 4 is the most significant optimization. In a minimum-length plan for the sorting problem, it is never optimal to make a swap that doesn't put at least one element into its correct final position. This \textbf{Local Optimality} constraint reduces the possible choices at each step from $O(N^2)$ to approximately $O(N)$, allowing the model to scale to N=30.
+    \item \textbf{State Transition:} The third and fourth constraints (lines 6 and 7) define the exchange of values between $t$ and $t+1$.
+    \item \textbf{Frame Axiom:} The nested \texttt{forall} ensures that all values not involved in the swap remain static. Without this, the solver could "teleport" values between steps.
 \end{enumerate}
 
-\subsection{Symmetry Breaking for Independent Moves} 
-\begin{lstlisting}[language=C] 
+\subsection{Symmetry Breaking for Independent Moves}
+\begin{lstlisting}[language=C]
 constraint forall(t in 0..k-2) (
     (idx1[t] != idx1[t+1] \/ idx2[t] != idx2[t+1]) /\
     let {
-        var bool: disjoint = (idx1[t] != idx1[t+1] /\ 
-                              idx1[t] != idx2[t+1] /\ 
-                              idx2[t] != idx1[t+1] /\ 
+        var bool: disjoint = (idx1[t] != idx1[t+1] /\
+                              idx1[t] != idx2[t+1] /\
+                              idx2[t] != idx1[t+1] /\
                               idx2[t] != idx2[t+1])
     } in (
         disjoint -> (idx1[t] < idx1[t+1])
     )
 );
-\end{lstlisting} 
-We are
-\begin{enumerate} 
-\item Preventing the solver from performing a swap and then immediately reversing it (e.g., swap(1,2)→swap(1,2)). 
+\end{lstlisting}
+This constraint enforces two symmetry-breaking rules:
+\begin{enumerate}
+\item Preventing the solver from performing a swap and then immediately reversing it (e.g., swap(1,2)→swap(1,2)).
 \item If two consecutive swaps are disjoint (acting on four different indices), the order in which they are performed is irrelevant, therefore we force a lexicographical order on \texttt{idx1} for disjoint moves to avoid exploring identical plans. Consider, for exmple, the vector $V_t = [2, 1, 4, 3]$. To sort it, two disjoint swaps are required: $S_A$ at indices $(1, 2)$ and $S_B$ at indices $(3, 4)$.
 The solver could explore two equivalent sequences:
 \begin{enumerate}
@@ -112,3 +131,57 @@ The solver could explore two equivalent sequences:
 \end{enumerate}
 The constraint \texttt{disjoint -> (idx1[t] < idx1[t+1])} ensures that only the first sequence is explored, as $1 < 3$ is true while $3 < 1$ is false. This effectively removes redundant search branches that lead to the same state.
 \end{enumerate}
+
+\subsection{Fixed Point Propagation}
+
+This constraint prevents the solver from involving already-fixed elements in future swaps:
+
+\begin{lstlisting}[language=C]
+constraint forall(t in 0..k-1, p in 1..n) (
+    v[t, p] = p -> (idx1[t] != p /\ idx2[t] != p)
+);
+\end{lstlisting}
+
+If an element is already in its correct position ($v[t, p] = p$), involving it in any swap would displace it unnecessarily. In an optimal plan, no move should ``undo'' progress already made.
+
+\paragraph{Example} Consider the state $[1, 3, 2, 4, 5]$ at time $t$. Elements 1, 4, and 5 are already fixed. The constraint ensures that positions 1, 4, and 5 cannot appear in $idx1[t]$ or $idx2[t]$, reducing the branching factor from $\binom{5}{2} = 10$ possible swaps to $\binom{2}{2} = 1$ (only swap(2,3) is valid).
+
+\subsection{Global Uniqueness of Swaps}
+
+This constraint ensures that each swap pair $(i, j)$ appears at most once in the entire plan:
+
+\begin{lstlisting}[language=C]
+constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
+    idx1[t1] != idx1[t2] \/ idx2[t1] != idx2[t2]
+);
+\end{lstlisting}
+
+In an optimal plan, repeating the same swap is never useful:
+\begin{itemize}
+    \item \textbf{Consecutive repetition:} Two identical swaps cancel each other (already prevented by the first rule of the Symmetry Breaking constraint in Section 2.6).
+    \item \textbf{Non-consecutive repetition:} If swap$(i,j)$ appears at times $t_1$ and $t_2$ ($t_1 < t_2$), the elements at positions $i$ and $j$ return to their original values after $t_2$. This implies the intermediate swaps could be reorganized into a shorter plan.
+\end{itemize}
+
+This constraint has $O(k^2)$ comparisons, but since $k \leq n-1$ for optimal plans, the overhead is negligible.
+
+\subsection{Summary of Constraints}
+
+The complete model includes 7 main constraints:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|l|l|}
+\hline
+\textbf{\#} & \textbf{Constraint} & \textbf{Effect} \\
+\hline
+1 & Boundary Conditions & Fixes initial and goal states \\
+2 & Parity Invariant & Prunes 50\% of $k$ values \\
+3 & Channeling + GAC & Maximum propagation via dual model \\
+4 & Optimal Swap Property & Reduces branching from $O(N^2)$ to $O(N)$ \\
+5 & Symmetry Breaking & Eliminates equivalent plans \\
+6 & Fixed Point Propagation & Avoids moves on already-sorted elements \\
+7 & Global Swap Uniqueness & Prevents redundant swap repetitions \\
+\hline
+\end{tabular}
+\caption{Summary of constraints in \texttt{sorting.mzn}}
+\end{table}
