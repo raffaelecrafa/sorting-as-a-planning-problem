@@ -8,7 +8,7 @@ __pycache__/
 *.log
 *.out
 *.toc
-*.pdf
+# *.pdf
 *.synctex.gz
 *.fdb_latexmk
 *.fls
