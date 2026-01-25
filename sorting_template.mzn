@@ -133,6 +133,43 @@ constraint forall(t in 0..k-2) (
     )
 );
 
+% =============================================================================
+% VINCOLO 5: FIXED POINT PROPAGATION
+% =============================================================================
+% Se un elemento è nella sua posizione corretta (v[t, p] = p), quella posizione
+% non deve MAI più essere coinvolta in swap futuri.
+% Razionale: uno swap su un punto fisso lo "spiazzerebbe" inutilmente.
+% =============================================================================
+
+constraint forall(t in 0..k-1, p in 1..n) (
+    v[t, p] = p -> (idx1[t] != p /\ idx2[t] != p)
+);
+
+
+% =============================================================================
+% VINCOLO 6: STATO FINALE ESPLICITO (IDENTITÀ)
+% =============================================================================
+% Lo stato finale deve essere esattamente la permutazione identità.
+% Anche se implicito dal vincolo di ordinamento, renderlo esplicito
+% può migliorare la propagazione backward.
+% =============================================================================
+
+constraint forall(p in 1..n) (v[k, p] = p);
+
+
+% =============================================================================
+% VINCOLO 7: NO SWAP RIPETUTI (GLOBAL)
+% =============================================================================
+% Ogni coppia (i, j) può apparire AL MASSIMO UNA VOLTA nel piano.
+% In una soluzione ottimale, ripetere uno swap è sempre inutile:
+% - Se (i,j) appare due volte consecutive: si annullano
+% - Se (i,j) appare non consecutive: esiste un piano più corto
+% =============================================================================
+
+constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
+    idx1[t1] != idx1[t2] \/ idx2[t1] != idx2[t2]
+);
+
 
 % =============================================================================
 % STRATEGIA DI RICERCA (PLACEHOLDER)
