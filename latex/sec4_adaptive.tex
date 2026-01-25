@@ -1,4 +1,5 @@
 \section{Search Strategies and Template Model}
+\label{sec:adaptive}
 
 To systematically compare different search strategies, we created \texttt{sorting\_template.mzn}, which is \textbf{identical} to \texttt{sorting.mzn} with two differences: (1) the \texttt{solve} statement is replaced by a placeholder \texttt{\{\{SOLVE\_STRATEGY\}\}} for dynamic strategy injection, and (2) an auxiliary array \texttt{all\_moves} is defined to aggregate the decision variables.
 
@@ -149,9 +150,10 @@ Without any restart annotation, the solver performs complete enumeration. This c
 12 & norestart & dom\_w\_deg & random & None \\
 \hline
 \end{tabular}
-\caption{All 12 search strategies tested}
+\caption{All 12 search strategies tested.}
+\label{tab:strategies}
 \end{table}
 
 \subsection{Parallel Execution}
 
-To reduce benchmark time, strategies are executed in parallel using Python's \texttt{ThreadPoolExecutor}. Each strategy runs in its own thread, allowing simultaneous comparison on the same instance. Results are written to a shared CSV file with thread-safe locking.
+To reduce benchmark time, strategies are executed in parallel by leveraging multi-threading: each strategy is run in a separate thread, allowing simultaneous comparison on the same instance. Results are collected in a shared CSV file with appropriate locking to ensure data consistency.
