@@ -2,8 +2,6 @@
 
 This repository contains the implementation of **Project 5** for the **Constraint Programming** course (2025). The project explores modeling the sorting of a vector as a discrete-time planning problem, identifying the minimum sequence of pairwise swaps required to reach a sorted state.
 
-> 📖 **Per una spiegazione dettagliata del problema e dei vincoli, consulta [SPIEGAZIONE.md](SPIEGAZIONE.md)**
-
 ## 📋 Project Overview
 
 The objective is to find the **minimum plan length $k$** to sort a permutation of $N$ integers. While basic CP models struggle with the combinatorial explosion of planning horizons, this solution implements state-of-the-art optimizations to achieve high performance even for $N=30$.
@@ -27,7 +25,6 @@ The objective is to find the **minimum plan length $k$** to sort a permutation o
 | `benchmark.py` | Basic Iterative Deepening solver. |
 | `benchmark_strategies.py` | Advanced experimental engine with 12 search strategies. |
 | `plot.py` | Data visualization script (generates 11 different charts). |
-| `SPIEGAZIONE.md` | Detailed explanation of the problem, constraints, and strategies (in Italian). |
 
 ## 🛠 Prerequisites
 

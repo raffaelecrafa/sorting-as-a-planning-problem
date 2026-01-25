@@ -1,168 +1,167 @@
 % =============================================================================
-% SORTING COME PROBLEMA DI PIANIFICAZIONE DISCRETA
+% SORTING AS A DISCRETE PLANNING PROBLEM
 % =============================================================================
-% Progetto 5 - Constraint Programming
+% Project 5 - Constraint Programming
 %
-% PROBLEMA: Dato un vettore di N interi (permutazione di 1..N), trovare il
-%           numero MINIMO di scambi (swap) per ordinarlo in modo crescente.
+% PROBLEM: Given a vector of N integers (permutation of 1..N), find the
+%          MINIMUM number of swaps to sort it in ascending order.
 %
-% APPROCCIO: Modellato come sistema di transizione di stati:
-%            - Stato: configurazione del vettore ad ogni timestep
-%            - Azione: scambio di due posizioni
-%            - Goal: raggiungere lo stato ordinato in K passi
+% APPROACH: Modeled as a state-transition system:
+%           - State: vector configuration at each timestep
+%           - Action: swap of two positions
+%           - Goal: reach the sorted state in K steps
 %
-% NOTA: Questo è un problema di SODDISFACIMENTO (SAT), non ottimizzazione.
-%       Il K minimo viene trovato tramite Iterative Deepening in Python.
+% NOTE: This is a SATISFACTION (SAT) problem, not optimization.
+%       The minimum K is found via Iterative Deepening in Python.
 % =============================================================================
 
 include "globals.mzn";
 
 % =============================================================================
-% INPUT - Parametri forniti dall'istanza
+% INPUT - Parameters provided by the instance
 % =============================================================================
-int: n;                       % Dimensione del vettore
-array[1..n] of int: start_v;  % Permutazione iniziale (es. [2, 3, 1, 5, 4])
-int: k;                       % Lunghezza del piano (numero di swap da eseguire)
+int: n;                       % Vector size
+array[1..n] of int: start_v;  % Initial permutation (e.g., [2, 3, 1, 5, 4])
+int: k;                       % Plan length (number of swaps to perform)
 
 % =============================================================================
-% VARIABILI DECISIONALI
+% DECISION VARIABLES
 % =============================================================================
 
-% v[t, p] = valore nella posizione p al timestep t
-% - Riga t=0: stato iniziale (fissato a start_v)
-% - Riga t=k: stato finale (deve essere ordinato)
-% - Ogni riga intermedia: stato dopo t swap
+% v[t, p] = value at position p at timestep t
+% - Row t=0: initial state (fixed to start_v)
+% - Row t=k: final state (must be sorted)
+% - Intermediate rows: state after t swaps
 array[0..k, 1..n] of var 1..n: v;
 
-% pos[t, i] = posizione del valore i al timestep t
-% Questo è il MODELLO DUALE (ridondante) usato per il channeling.
-% Permette di accedere efficientemente alla posizione di un valore.
-% Esempio: se v[0,..] = [2,3,1,5,4], allora pos[0,..] = [3,1,2,5,4]
-%          (il valore 1 è in posizione 3, il valore 2 è in posizione 1, ecc.)
+% pos[t, i] = position of value i at timestep t
+% This is the DUAL MODEL (redundant) used for channeling.
+% Allows efficient access to the position of a value.
+% Example: if v[0,..] = [2,3,1,5,4], then pos[0,..] = [3,1,2,5,4]
+%          (value 1 is at position 3, value 2 is at position 1, etc.)
 array[0..k, 1..n] of var 1..n: pos;
 
-% idx1[t], idx2[t] = indici delle posizioni da scambiare al passo t
-% Invariante: idx1[t] < idx2[t] (symmetry breaking sugli indici)
+% idx1[t], idx2[t] = indices of positions to swap at step t
+% Invariant: idx1[t] < idx2[t] (symmetry breaking on indices)
 array[0..k-1] of var 1..n: idx1;
 array[0..k-1] of var 1..n: idx2;
 
 
 % =============================================================================
-% VINCOLO 1: CONDIZIONI AL CONTORNO (Boundary Conditions)
+% CONSTRAINT 1: BOUNDARY CONDITIONS
 % =============================================================================
-% Scopo: Fissare lo stato iniziale e imporre che lo stato finale sia ordinato.
+% Purpose: Fix the initial state and require the final state to be sorted.
 %
-% - v[0, p] = start_v[p]: la prima riga della matrice v corrisponde all'input
-% - v[k, p] <= v[k, p+1]: l'ultima riga deve essere ordinata in modo crescente
+% - v[0, p] = start_v[p]: the first row of matrix v corresponds to the input
+% - v[k, p] <= v[k, p+1]: the last row must be sorted in ascending order
 % =============================================================================
 
 constraint forall(p in 1..n) (
-    v[0, p] = start_v[p]  % Stato iniziale fissato
+    v[0, p] = start_v[p]  % Initial state fixed
 );
 
 constraint forall(p in 1..n) (
-    v[k, p] = p  % Stato finale = permutazione identità (più forte di "ordinato")
+    v[k, p] = p  % Final state = identity permutation (stronger than "sorted")
 );
 
 
 % =============================================================================
-% VINCOLO 2: PARITÀ DELLE INVERSIONI (Parity Constraint)
+% CONSTRAINT 2: INVERSION PARITY (Parity Constraint)
 % =============================================================================
-% Scopo: Tagliare il 50% dello spazio di ricerca sfruttando la teoria delle
-%        permutazioni.
+% Purpose: Cut 50% of the search space by exploiting permutation theory.
 %
-% TEORIA:
-% - Un'INVERSIONE è una coppia (i,j) con i < j ma v[i] > v[j]
-% - Ogni SWAP cambia il numero di inversioni di ±1 (inverte la parità)
-% - Lo stato ordinato ha 0 inversioni (PARI)
-% - Quindi: K deve avere la stessa parità del numero iniziale di inversioni
+% THEORY:
+% - An INVERSION is a pair (i,j) with i < j but v[i] > v[j]
+% - Each SWAP changes the inversion count by +/-1 (inverts the parity)
+% - The sorted state has 0 inversions (EVEN)
+% - Therefore: K must have the same parity as the initial inversion count
 %
-% ESEMPIO:
-%   [2, 3, 1, 5, 4] ha 3 inversioni: (1,3), (2,3), (4,5) → DISPARI
-%   Quindi K deve essere DISPARI (K = 1, 3, 5, ...)
+% EXAMPLE:
+%   [2, 3, 1, 5, 4] has 3 inversions: (1,3), (2,3), (4,5) -> ODD
+%   Therefore K must be ODD (K = 1, 3, 5, ...)
 %
-% EFFETTO: Se initial_inv è dispari, tutti i K pari sono impossibili e vengono
-%          scartati senza esplorazione.
+% EFFECT: If initial_inv is odd, all even K values are impossible and
+%         are discarded without exploration.
 % =============================================================================
 
 int: initial_inv = sum(i, j in 1..n where i < j)(
-    bool2int(start_v[i] > start_v[j])  % Conta le inversioni nella permutazione iniziale
+    bool2int(start_v[i] > start_v[j])  % Count inversions in initial permutation
 );
 
-constraint (k mod 2) == (initial_inv mod 2);  % K e inversioni devono avere stessa parità
+constraint (k mod 2) == (initial_inv mod 2);  % K and inversions must have same parity
 
 
 % =============================================================================
-% VINCOLO 3: CHANNELING & GAC (Dual Model with Maximum Propagation)
+% CONSTRAINT 3: CHANNELING & GAC (Dual Model with Maximum Propagation)
 % =============================================================================
-% Scopo: Creare una rappresentazione duale valore↔posizione per massimizzare
-%        la propagazione dei vincoli.
+% Purpose: Create a dual value<->position representation to maximize
+%          constraint propagation.
 %
-% VINCOLO INVERSE:
-% - inverse(A, B) impone che A[i] = j ⟺ B[j] = i
-% - Qui: v[t, p] = i ⟺ pos[t, i] = p
-% - Ogni riduzione di dominio in v si propaga immediatamente a pos (e viceversa)
+% INVERSE CONSTRAINT:
+% - inverse(A, B) enforces that A[i] = j <=> B[j] = i
+% - Here: v[t, p] = i <=> pos[t, i] = p
+% - Every domain reduction in v propagates immediately to pos (and vice versa)
 %
 % ALLDIFFERENT :: DOMAIN:
-% - Garantisce che tutti i valori in ogni riga siano distinti
-% - L'annotazione ":: domain" attiva l'algoritmo di Régin per GAC
-% - GAC (Generalized Arc Consistency) = massima propagazione possibile
+% - Guarantees that all values in each row are distinct
+% - The ":: domain" annotation activates Regin's algorithm for GAC
+% - GAC (Generalized Arc Consistency) = maximum possible propagation
 %
-% PERCHÉ È UTILE:
-% - Se scopriamo che v[t, 3] ≠ 5, automaticamente pos[t, 5] ≠ 3
-% - Riduce drasticamente il branching factor
+% WHY IS IT USEFUL:
+% - If we discover that v[t, 3] != 5, automatically pos[t, 5] != 3
+% - Drastically reduces the branching factor
 % =============================================================================
 
 constraint forall(t in 0..k) (
-    % Channeling: collega v e pos tramite la relazione inversa
+    % Channeling: links v and pos via the inverse relation
     inverse([v[t, p] | p in 1..n], [pos[t, i] | i in 1..n]) /\
 
-    % GAC su alldifferent per propagazione massima
+    % GAC on alldifferent for maximum propagation
     alldifferent([v[t, p] | p in 1..n]) :: domain
 );
 
 
 % =============================================================================
-% VINCOLO 4: LOGICA DELLO SWAP OTTIMALE (Optimal Swap Property)
+% CONSTRAINT 4: OPTIMAL SWAP LOGIC (Optimal Swap Property)
 % =============================================================================
-% Scopo: Modellare la meccanica dello swap e imporre che ogni swap sia "utile".
+% Purpose: Model swap mechanics and enforce that each swap is "useful".
 %
-% COMPONENTI:
+% COMPONENTS:
 %
 % a) idx1[t] < idx2[t]
-%    - SYMMETRY BREAKING: evita di contare (3,5) e (5,3) come swap diversi
+%    - SYMMETRY BREAKING: avoids counting (3,5) and (5,3) as different swaps
 %
-% b) (v[t, idx2[t]] = idx1[t]) ∨ (v[t, idx1[t]] = idx2[t])
-%    - PROPRIETÀ DI OTTIMALITÀ (dalla teoria dei gruppi):
-%      In un piano di lunghezza MINIMA, ogni swap deve fissare almeno un
-%      elemento nella sua posizione finale corretta.
-%    - Se scambiamo posizioni idx1 e idx2:
-%      * v[t, idx2[t]] = idx1[t] significa: "il valore in idx2 è proprio idx1,
-%        quindi dopo lo swap andrà nella posizione giusta"
-%      * Analogamente per l'altra condizione
-%    - EFFETTO: Riduce il branching da O(N²) scambi possibili a O(N)
+% b) (v[t, idx2[t]] = idx1[t]) \/ (v[t, idx1[t]] = idx2[t])
+%    - OPTIMALITY PROPERTY (from group theory):
+%      In a MINIMUM length plan, each swap must fix at least one
+%      element in its final correct position.
+%    - If we swap positions idx1 and idx2:
+%      * v[t, idx2[t]] = idx1[t] means: "the value at idx2 is exactly idx1,
+%        so after the swap it will go to the correct position"
+%      * Similarly for the other condition
+%    - EFFECT: Reduces branching from O(N^2) possible swaps to O(N)
 %
-% c) v[t+1, idx1[t]] = v[t, idx2[t]] e v[t+1, idx2[t]] = v[t, idx1[t]]
-%    - MECCANICA DELLO SWAP: i valori nelle due posizioni si scambiano
+% c) v[t+1, idx1[t]] = v[t, idx2[t]] and v[t+1, idx2[t]] = v[t, idx1[t]]
+%    - SWAP MECHANICS: the values at the two positions are exchanged
 %
-% d) forall(p ≠ idx1[t], idx2[t]): v[t+1, p] = v[t, p]
-%    - FRAME AXIOM: tutto ciò che non è coinvolto nello swap rimane invariato
-%    - Fondamentale nella pianificazione: specifica cosa NON cambia
+% d) forall(p != idx1[t], idx2[t]): v[t+1, p] = v[t, p]
+%    - FRAME AXIOM: everything not involved in the swap remains unchanged
+%    - Fundamental in planning: specifies what does NOT change
 % =============================================================================
 
 constraint forall(t in 0..k-1) (
-    % a) Symmetry breaking: idx1 sempre minore di idx2
+    % a) Symmetry breaking: idx1 always less than idx2
     idx1[t] < idx2[t] /\
 
-    % b) Proprietà di ottimalità: lo swap deve fissare almeno un elemento
-    %    nella sua posizione corretta (derivato dalla teoria dei gruppi)
+    % b) Optimality property: the swap must fix at least one element
+    %    in its correct position (derived from group theory)
     (v[t, idx2[t]] = idx1[t] \/ v[t, idx1[t]] = idx2[t]) /\
 
-    % c) Meccanica dello swap: scambia i valori nelle due posizioni
+    % c) Swap mechanics: exchange values at the two positions
     v[t+1, idx1[t]] = v[t, idx2[t]] /\
     v[t+1, idx2[t]] = v[t, idx1[t]] /\
 
-    % d) Frame Axiom: le altre posizioni rimangono invariate
+    % d) Frame Axiom: other positions remain unchanged
     forall(p in 1..n where p != idx1[t] /\ p != idx2[t]) (
         v[t+1, p] = v[t, p]
     )
@@ -170,58 +169,58 @@ constraint forall(t in 0..k-1) (
 
 
 % =============================================================================
-% VINCOLO 5: ROTTURA DELLE SIMMETRIE (Symmetry Breaking on Swap Sequences)
+% CONSTRAINT 5: SYMMETRY BREAKING (Symmetry Breaking on Swap Sequences)
 % =============================================================================
-% Scopo: Eliminare soluzioni equivalenti che rappresentano lo stesso piano
-%        in ordine diverso.
+% Purpose: Eliminate equivalent solutions that represent the same plan
+%          in different order.
 %
-% PARTE A: (idx1[t] ≠ idx1[t+1]) ∨ (idx2[t] ≠ idx2[t+1])
-%    - Vieta swap IDENTICI consecutivi
-%    - Due swap uguali di fila si annullano: Swap(2,3) + Swap(2,3) = nulla
-%    - Impossibile in un piano ottimo
+% PART A: (idx1[t] != idx1[t+1]) \/ (idx2[t] != idx2[t+1])
+%    - Forbids IDENTICAL consecutive swaps
+%    - Two identical swaps in a row cancel each other: Swap(2,3) + Swap(2,3) = nothing
+%    - Impossible in an optimal plan
 %
-% PARTE B: Ordinamento lessicografico degli swap DISGIUNTI
-%    - Due swap sono DISGIUNTI se non condividono alcuna posizione
-%    - Swap disgiunti commutano: l'ordine non influenza il risultato
-%    - Esempio: Swap(1,2) e Swap(4,5) possono essere eseguiti in qualsiasi ordine
-%    - Per eliminare questa simmetria, imponiamo un ordine canonico:
-%      Se gli swap t e t+1 sono disgiunti, allora idx1[t] < idx1[t+1]
+% PART B: Lexicographic ordering of DISJOINT swaps
+%    - Two swaps are DISJOINT if they share no position
+%    - Disjoint swaps commute: the order doesn't affect the result
+%    - Example: Swap(1,2) and Swap(4,5) can be executed in any order
+%    - To eliminate this symmetry, we impose a canonical order:
+%      If swaps at t and t+1 are disjoint, then idx1[t] < idx1[t+1]
 %
-% ESEMPIO:
-%    Piano A: Swap(1,3), Swap(4,5)  ← accettato (1 < 4)
-%    Piano B: Swap(4,5), Swap(1,3)  ← rifiutato (4 > 1, viola il vincolo)
-%    Entrambi producono lo stesso risultato, ma solo A è ammesso.
+% EXAMPLE:
+%    Plan A: Swap(1,3), Swap(4,5)  <- accepted (1 < 4)
+%    Plan B: Swap(4,5), Swap(1,3)  <- rejected (4 > 1, violates constraint)
+%    Both produce the same result, but only A is allowed.
 % =============================================================================
 
 constraint forall(t in 0..k-2) (
-    % Parte A: No swap identici consecutivi
+    % Part A: No identical consecutive swaps
     (idx1[t] != idx1[t+1] \/ idx2[t] != idx2[t+1]) /\
 
-    % Parte B: Ordinamento lessicografico per swap disgiunti
+    % Part B: Lexicographic ordering for disjoint swaps
     let {
-        % Verifica se i due swap sono completamente disgiunti
-        % (nessuna posizione in comune)
+        % Check if the two swaps are completely disjoint
+        % (no position in common)
         var bool: disjoint = (idx1[t] != idx1[t+1] /\ idx1[t] != idx2[t+1] /\
                               idx2[t] != idx1[t+1] /\ idx2[t] != idx2[t+1])
     } in (
-        % Se disgiunti, forza ordine lessicografico
+        % If disjoint, force lexicographic order
         disjoint -> (idx1[t] < idx1[t+1])
     )
 );
 
 
 % =============================================================================
-% VINCOLO 6: FIXED POINT PROPAGATION
+% CONSTRAINT 6: FIXED POINT PROPAGATION
 % =============================================================================
-% Scopo: Se un elemento è già nella sua posizione corretta (v[t, p] = p),
-%        quella posizione NON deve essere coinvolta in swap futuri.
+% Purpose: If an element is already in its correct position (v[t, p] = p),
+%          that position must NOT be involved in future swaps.
 %
-% RAZIONALE:
-% - Un elemento "fissato" (v[t, p] = p) è già al posto giusto
-% - Coinvolgerlo in uno swap lo sposterebbe inutilmente
-% - In un piano ottimo, nessuna mossa "disfa" progresso già fatto
+% RATIONALE:
+% - A "fixed" element (v[t, p] = p) is already in the right place
+% - Involving it in a swap would displace it unnecessarily
+% - In an optimal plan, no move "undoes" progress already made
 %
-% EFFETTO: Riduce il branching eliminando mosse inutili
+% EFFECT: Reduces branching by eliminating useless moves
 % =============================================================================
 
 constraint forall(t in 0..k-1, p in 1..n) (
@@ -230,21 +229,21 @@ constraint forall(t in 0..k-1, p in 1..n) (
 
 
 % =============================================================================
-% VINCOLO 7: NO SWAP RIPETUTI (Global Uniqueness)
+% CONSTRAINT 7: NO REPEATED SWAPS (Global Uniqueness)
 % =============================================================================
-% Scopo: Ogni coppia (i, j) può apparire AL MASSIMO UNA VOLTA nel piano.
+% Purpose: Each pair (i, j) can appear AT MOST ONCE in the plan.
 %
-% RAZIONALE:
-% - Se (i,j) appare due volte consecutive → si annullano (già vietato dal vincolo 5A)
-% - Se (i,j) appare due volte non consecutive → esiste un piano più corto
-%   (gli swap intermedi potrebbero essere riorganizzati)
+% RATIONALE:
+% - If (i,j) appears twice consecutively -> they cancel (already forbidden by constraint 5A)
+% - If (i,j) appears twice non-consecutively -> a shorter plan exists
+%   (intermediate swaps could be reorganized)
 %
-% DIMOSTRAZIONE (sketch):
-%   Se Swap(i,j) appare ai tempi t1 e t2 (t1 < t2), gli elementi in i e j
-%   tornano alle posizioni originali dopo t2. Quindi gli swap tra t1 e t2
-%   avrebbero potuto agire direttamente → piano non ottimo.
+% PROOF (sketch):
+%   If Swap(i,j) appears at times t1 and t2 (t1 < t2), the elements at i and j
+%   return to their original positions after t2. Therefore the swaps between t1 and t2
+%   could have acted directly -> plan is not optimal.
 %
-% EFFETTO: Elimina ridondanze globali nel piano
+% EFFECT: Eliminates global redundancies in the plan
 % =============================================================================
 
 constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
@@ -253,18 +252,18 @@ constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
 
 
 % =============================================================================
-% STRATEGIA DI RICERCA
+% SEARCH STRATEGY
 % =============================================================================
-% Utilizziamo Gecode con Luby Restart come suggerito nelle slide CP 2025.
+% We use Gecode with Luby Restart as suggested in CP 2025 slides.
 %
 % LUBY RESTART:
-% - Sequenza universale: 1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 2, 4, 8, ...
-% - Dopo 250 × L fallimenti (dove L è l'elemento corrente della sequenza),
-%   il solver riparte dalla radice
-% - Vantaggi: sfugge a zone "morte" dello spazio di ricerca, evita heavy-tail
+% - Universal sequence: 1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 2, 4, 8, ...
+% - After 250 * L failures (where L is the current sequence element),
+%   the solver restarts from the root
+% - Advantages: escapes "dead" zones of the search space, avoids heavy-tail
 %
-% NOTA: La strategia di default di Gecode sceglie automaticamente le variabili
-%       e i valori. Per strategie personalizzate, vedere sorting_template.mzn
+% NOTE: Gecode's default strategy automatically chooses variables
+%       and values. For custom strategies, see sorting_template.mzn
 % =============================================================================
 
 solve :: restart_luby(250) satisfy;

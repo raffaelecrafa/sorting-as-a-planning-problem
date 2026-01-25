@@ -5,30 +5,30 @@ import time
 import os
 import shutil
 
-# --- CONFIGURAZIONE ---
+# --- CONFIGURATION ---
 MODEL_FILE = "sorting.mzn"
 SOLVER_NAME = "gecode"
-TIMEOUT_SEC = 300       # 5 minuti
+TIMEOUT_SEC = 300       # 5 minutes
 OUTPUT_DIR = "result_benchmark"
 
 
 # =============================================================================
-# CALCOLO LOWER BOUND TRAMITE DECOMPOSIZIONE IN CICLI
+# LOWER BOUND CALCULATION VIA CYCLE DECOMPOSITION
 # =============================================================================
-# Teoria: Una permutazione può essere decomposta in cicli disgiunti.
-#         Il numero minimo di swap per ordinarla è: K_min = N - num_cicli
+# Theory: A permutation can be decomposed into disjoint cycles.
+#         The minimum number of swaps to sort it is: K_min = N - num_cycles
 #
-# Esempio: [2, 3, 1, 5, 4]
-#          Ciclo 1: 1 → 2 → 3 → 1 (lunghezza 3)
-#          Ciclo 2: 4 → 5 → 4 (lunghezza 2)
-#          num_cicli = 2, quindi K_min = 5 - 2 = 3
+# Example: [2, 3, 1, 5, 4]
+#          Cycle 1: 1 -> 2 -> 3 -> 1 (length 3)
+#          Cycle 2: 4 -> 5 -> 4 (length 2)
+#          num_cycles = 2, so K_min = 5 - 2 = 3
 # =============================================================================
 
 def count_cycles(perm):
     """
-    Conta il numero di cicli nella permutazione.
-    perm: lista 1-indexed (perm[0] è la posizione 1)
-    Ritorna: numero di cicli disgiunti
+    Count the number of cycles in the permutation.
+    perm: 1-indexed list (perm[0] is position 1)
+    Returns: number of disjoint cycles
     """
     n = len(perm)
     visited = [False] * n
@@ -40,7 +40,7 @@ def count_cycles(perm):
             j = i
             while not visited[j]:
                 visited[j] = True
-                # perm è 1-indexed, quindi perm[j] - 1 per ottenere l'indice 0-based
+                # perm is 1-indexed, so perm[j] - 1 to get 0-based index
                 j = perm[j] - 1
 
     return num_cycles
@@ -48,8 +48,8 @@ def count_cycles(perm):
 
 def count_inversions(perm):
     """
-    Conta il numero di inversioni nella permutazione.
-    Un'inversione è una coppia (i, j) con i < j ma perm[i] > perm[j].
+    Count the number of inversions in the permutation.
+    An inversion is a pair (i, j) with i < j but perm[i] > perm[j].
     """
     n = len(perm)
     inv = 0
@@ -62,14 +62,14 @@ def count_inversions(perm):
 
 def compute_starting_k(perm):
     """
-    Calcola il valore iniziale di K usando il lower bound teorico.
-    Applica anche la correzione di parità.
+    Calculate the initial value of K using the theoretical lower bound.
+    Also applies parity correction.
     """
     n = len(perm)
     num_cycles = count_cycles(perm)
-    k_min = n - num_cycles  # Lower bound dalla teoria dei gruppi
+    k_min = n - num_cycles  # Lower bound from group theory
 
-    # Correzione parità: K deve avere la stessa parità delle inversioni
+    # Parity correction: K must have the same parity as inversions
     initial_inv = count_inversions(perm)
     if (k_min % 2) != (initial_inv % 2):
         k_min += 1
@@ -79,24 +79,24 @@ def compute_starting_k(perm):
 
 def solve_sorting_instance(model, solver, n, start_v):
     """
-    Tenta di risolvere l'istanza incrementando k finché non trova soluzione.
-    Usa il lower bound teorico (N - num_cicli) come punto di partenza.
-    Ritorna: k, result, elapsed_time
+    Attempt to solve the instance by incrementing k until a solution is found.
+    Uses the theoretical lower bound (N - num_cycles) as starting point.
+    Returns: k, result, elapsed_time
     """
-    print(f"--- Risolvendo vettore di dimensione {n}: {start_v} ---")
+    print(f"--- Solving vector of size {n}: {start_v} ---")
 
-    # Calcola K iniziale dal lower bound teorico (con correzione parità)
+    # Calculate initial K from theoretical lower bound (with parity correction)
     k = compute_starting_k(start_v)
-    print(f"  Lower bound teorico: k={k} (n={n}, cicli={count_cycles(start_v)})")
+    print(f"  Theoretical lower bound: k={k} (n={n}, cycles={count_cycles(start_v)})")
 
     found = False
     start_time_total = time.time()
 
     while not found:
-        # Crea un'istanza passando il modello GIÀ CARICATO
+        # Create an instance passing the ALREADY LOADED model
         instance = minizinc.Instance(solver, model)
 
-        # Assegna i dati
+        # Assign data
         instance["n"] = n
         instance["start_v"] = start_v
         instance["k"] = k
@@ -107,7 +107,7 @@ def solve_sorting_instance(model, solver, n, start_v):
             result = instance.solve(timeout=timedelta(seconds=TIMEOUT_SEC))
 
             if result.status == minizinc.Status.SATISFIED:
-                # --- CALCOLO DEL TEMPO ---
+                # --- TIME CALCULATION ---
                 raw_time = result.statistics.get('time', 0)
                 if isinstance(raw_time, timedelta):
                     elapsed = raw_time.total_seconds()
@@ -115,22 +115,22 @@ def solve_sorting_instance(model, solver, n, start_v):
                     elapsed = float(raw_time)
                 # ------------------------
 
-                print(f"TROVATO! ({elapsed:.2f}s)")
+                print(f"FOUND! ({elapsed:.2f}s)")
                 return k, result, elapsed
 
             elif result.status == minizinc.Status.UNSATISFIABLE:
-                print("UNSAT. Incremento k.")
+                print("UNSAT. Incrementing k.")
                 k += 1
             else:
                 print(f"Status: {result.status}")
                 break
 
         except Exception as e:
-            print(f"\nErrore durante il solve: {e}")
+            print(f"\nError during solve: {e}")
             break
 
         if (time.time() - start_time_total) > TIMEOUT_SEC:
-             print("  TIMEOUT TOTALE.")
+             print("  TOTAL TIMEOUT.")
              return -1, None, TIMEOUT_SEC
 
     return -1, None, 0.0
@@ -148,7 +148,7 @@ def generate_benchmarks():
 
 def save_result_to_file(index, n, vec, k, time_taken, result):
     """
-    Salva i risultati in un file di testo leggibile.
+    Save results to a human-readable text file.
     """
     filename = f"result_{index:02d}_N{n}.txt"
     filepath = os.path.join(OUTPUT_DIR, filename)
@@ -158,57 +158,57 @@ def save_result_to_file(index, n, vec, k, time_taken, result):
         f.write(f"BENCHMARK INSTANCE #{index}\n")
         f.write("="*50 + "\n\n")
 
-        f.write(f"Dimensione Vettore (N): {n}\n")
-        f.write(f"Vettore Iniziale    : {vec}\n\n")
+        f.write(f"Vector Size (N): {n}\n")
+        f.write(f"Initial Vector : {vec}\n\n")
 
         if k != -1 and result is not None:
-            f.write(f"Stato: RISOLTO (OPTIMAL)\n")
-            f.write(f"Lunghezza Piano (K) : {k}\n")
-            f.write(f"Tempo di Esecuzione : {time_taken:.4f} secondi\n")
+            f.write(f"Status: SOLVED (OPTIMAL)\n")
+            f.write(f"Plan Length (K): {k}\n")
+            f.write(f"Execution Time : {time_taken:.4f} seconds\n")
             f.write("-" * 30 + "\n")
-            f.write("PIANO DI ORDINAMENTO:\n")
+            f.write("SORTING PLAN:\n")
             f.write("-" * 30 + "\n")
-            # Scrive l'output formattato definito nel file .mzn (output [...])
+            # Write formatted output defined in .mzn file (output [...])
             f.write(str(result))
         else:
-            f.write(f"Stato: FALLITO / TIMEOUT\n")
-            f.write(f"Tempo Trascorso: > {TIMEOUT_SEC} secondi\n")
+            f.write(f"Status: FAILED / TIMEOUT\n")
+            f.write(f"Elapsed Time: > {TIMEOUT_SEC} seconds\n")
 
-    # print(f"  -> Salvato in {filepath}")
+    # print(f"  -> Saved to {filepath}")
 
 if __name__ == "__main__":
-    # 0. Creazione cartella output
+    # 0. Create output folder
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
-        print(f"Cartella '{OUTPUT_DIR}' creata.")
+        print(f"Folder '{OUTPUT_DIR}' created.")
 
-    # Verifica esistenza file .mzn
+    # Check .mzn file exists
     if not os.path.exists(MODEL_FILE):
-        print(f"ERRORE: Non trovo il file {MODEL_FILE} nella cartella corrente.")
+        print(f"ERROR: Cannot find {MODEL_FILE} in current folder.")
         exit(1)
 
-    # 1. Carica il modello UNA VOLTA SOLA qui
+    # 1. Load model ONCE here
     try:
         model = minizinc.Model(MODEL_FILE)
         solver = minizinc.Solver.lookup(SOLVER_NAME)
     except Exception as e:
-        print(f"Errore caricamento MiniZinc: {e}")
+        print(f"Error loading MiniZinc: {e}")
         exit(1)
 
-    print("Generazione benchmark...")
+    print("Generating benchmarks...")
     tasks = generate_benchmarks()
 
-    print(f"Generate {len(tasks)} istanze. Inizio esecuzione e salvataggio file...")
+    print(f"Generated {len(tasks)} instances. Starting execution and saving files...")
     print("-" * 30)
 
     results_summary = []
 
-    # Esegue TUTTI i task (rimosso il limite [:3])
+    # Execute ALL tasks (removed [:3] limit)
     for i, (n, vec) in enumerate(tasks):
-        # Risolvi
+        # Solve
         best_k, res, elapsed = solve_sorting_instance(model, solver, n, vec)
 
-        # Salva su file
+        # Save to file
         save_result_to_file(i+1, n, vec, best_k, elapsed, res)
 
         results_summary.append({
@@ -219,5 +219,5 @@ if __name__ == "__main__":
         })
         print("-" * 30)
 
-    print(f"\n--- COMPLETATO ---")
-    print(f"I risultati dettagliati sono nella cartella '{OUTPUT_DIR}'")
+    print(f"\n--- COMPLETED ---")
+    print(f"Detailed results are in the '{OUTPUT_DIR}' folder")

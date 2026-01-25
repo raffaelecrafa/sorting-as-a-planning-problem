@@ -11,40 +11,40 @@ import threading
 
 warnings.filterwarnings("ignore", message=".*model inconsistency detected.*")
 
-# --- CONFIGURAZIONE ---
+# --- CONFIGURATION ---
 TEMPLATE_FILE = "sorting_template.mzn"
 SOLVER_NAME = "gecode"
 TIMEOUT_SEC = 300
 OUTPUT_ROOT = "results"
 
-# Lock per scrittura thread-safe su CSV e console
+# Lock for thread-safe CSV and console writing
 csv_lock = threading.Lock()
 print_lock = threading.Lock()
 
-# Dizionario delle strategie disponibili
+# Dictionary of available strategies
 STRATEGIES = {
-    # Strategie base
+    # Base strategies
     "default": "solve :: restart_luby(250) satisfy;",
     "firstfail": "solve :: restart_luby(250) :: int_search(all_moves, first_fail, indomain_random, complete) satisfy;",
     "domwdeg": "solve :: restart_luby(250) :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;",
 
-    # Strategie avanzate di selezione variabile
+    # Advanced variable selection strategies
     "smallest": "solve :: restart_luby(250) :: int_search(all_moves, smallest, indomain_min, complete) satisfy;",
     "mostconstrained": "solve :: restart_luby(250) :: int_search(all_moves, most_constrained, indomain_random, complete) satisfy;",
     "maxregret": "solve :: restart_luby(250) :: int_search(all_moves, max_regret, indomain_random, complete) satisfy;",
     "antifirstfail": "solve :: restart_luby(250) :: int_search(all_moves, anti_first_fail, indomain_random, complete) satisfy;",
 
-    # Strategie con bisection invece di enumerazione
+    # Strategies with bisection instead of enumeration
     "domwdeg_split": "solve :: restart_luby(250) :: int_search(all_moves, dom_w_deg, indomain_split, complete) satisfy;",
     "firstfail_split": "solve :: restart_luby(250) :: int_search(all_moves, first_fail, indomain_split, complete) satisfy;",
 
-    # Strategie con restart alternativi
+    # Strategies with alternative restart policies
     "geometric": "solve :: restart_geometric(1.5, 100) :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;",
     "linear": "solve :: restart_linear(250) :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;",
     "norestart": "solve :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;",
 }
 
-# Mapping per i nomi delle cartelle di output
+# Mapping for output folder names
 STRATEGY_FOLDER_NAMES = {
     "default": "01_Default_Restart",
     "firstfail": "02_Moves_FirstFail",
@@ -62,19 +62,19 @@ STRATEGY_FOLDER_NAMES = {
 
 
 def parse_args():
-    """Configura e parsa gli argomenti da linea di comando"""
+    """Configure and parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description="Benchmark comparativo delle strategie di ricerca per il problema di sorting.",
+        description="Comparative benchmark of search strategies for the sorting problem.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Esempi di utilizzo:
-  python benchmark_strategies.py --all                    # Esegue tutte le strategie
-  python benchmark_strategies.py default                  # Esegue solo default
-  python benchmark_strategies.py firstfail domwdeg        # Esegue firstfail e domwdeg
-  python benchmark_strategies.py --list                   # Mostra strategie disponibili
-  python benchmark_strategies.py --all -s 5 10 -n 3       # Solo N=5,10 con 3 istanze
+Usage examples:
+  python benchmark_strategies.py --all                    # Run all strategies
+  python benchmark_strategies.py default                  # Run only default
+  python benchmark_strategies.py firstfail domwdeg        # Run firstfail and domwdeg
+  python benchmark_strategies.py --list                   # Show available strategies
+  python benchmark_strategies.py --all -s 5 10 -n 3       # Only N=5,10 with 3 instances
 
-Strategie disponibili:
+Available strategies:
   default, firstfail, domwdeg, smallest, mostconstrained, maxregret,
   antifirstfail, domwdeg_split, firstfail_split, geometric, linear, norestart
 """
@@ -84,26 +84,26 @@ Strategie disponibili:
         "strategies",
         nargs="*",
         metavar="STRATEGY",
-        help="Strategie da eseguire (default, firstfail, domwdeg, ...)"
+        help="Strategies to run (default, firstfail, domwdeg, ...)"
     )
 
     parser.add_argument(
         "--all", "-a",
         action="store_true",
-        help="Esegue tutte le strategie disponibili"
+        help="Run all available strategies"
     )
 
     parser.add_argument(
         "--list", "-l",
         action="store_true",
-        help="Mostra le strategie disponibili ed esce"
+        help="Show available strategies and exit"
     )
 
     parser.add_argument(
         "--timeout", "-t",
         type=int,
         default=TIMEOUT_SEC,
-        help=f"Timeout in secondi per istanza (default: {TIMEOUT_SEC})"
+        help=f"Timeout in seconds per instance (default: {TIMEOUT_SEC})"
     )
 
     parser.add_argument(
@@ -111,56 +111,56 @@ Strategie disponibili:
         type=int,
         nargs="+",
         default=[5, 10, 15, 20, 25, 30],
-        help="Dimensioni dei vettori da testare (default: 5 10 15 20 25 30)"
+        help="Vector sizes to test (default: 5 10 15 20 25 30)"
     )
 
     parser.add_argument(
         "--instances", "-n",
         type=int,
         default=10,
-        help="Numero di istanze per ogni dimensione (default: 10)"
+        help="Number of instances per size (default: 10)"
     )
 
     parser.add_argument(
         "--workers", "-w",
         type=int,
         default=None,
-        help="Numero di thread paralleli (default: numero di strategie selezionate)"
+        help="Number of parallel threads (default: number of selected strategies)"
     )
 
     parser.add_argument(
         "--sequential",
         action="store_true",
-        help="Esegue in modalità sequenziale (disabilita multithreading)"
+        help="Run in sequential mode (disables multithreading)"
     )
 
     return parser.parse_args()
 
 
 def list_strategies():
-    """Mostra le strategie disponibili con descrizione"""
-    print("\n=== STRATEGIE DISPONIBILI ===\n")
+    """Show available strategies with descriptions"""
+    print("\n=== AVAILABLE STRATEGIES ===\n")
     descriptions = {
-        "default": "Euristica di default Gecode con Luby restart",
-        "firstfail": "Seleziona variabile con dominio più piccolo (fail fast)",
-        "domwdeg": "Domain/Weighted-Degree: impara dai fallimenti",
-        "smallest": "Seleziona variabile con valore minimo nel dominio",
-        "mostconstrained": "first_fail + occurrence (più aggressivo)",
-        "maxregret": "Massimizza differenza tra miglior e secondo valore",
-        "antifirstfail": "Seleziona variabile con dominio più grande",
-        "domwdeg_split": "dom_w_deg con bisection invece di enumerazione",
-        "firstfail_split": "first_fail con bisection invece di enumerazione",
-        "geometric": "Restart geometrico (1.5x ogni volta) con dom_w_deg",
-        "linear": "Restart lineare (incremento fisso) con dom_w_deg",
-        "norestart": "dom_w_deg SENZA restart (baseline)",
+        "default": "Gecode default heuristic with Luby restart",
+        "firstfail": "Select variable with smallest domain (fail fast)",
+        "domwdeg": "Domain/Weighted-Degree: learns from failures",
+        "smallest": "Select variable with minimum value in domain",
+        "mostconstrained": "first_fail + occurrence (more aggressive)",
+        "maxregret": "Maximize difference between best and second-best value",
+        "antifirstfail": "Select variable with largest domain",
+        "domwdeg_split": "dom_w_deg with bisection instead of enumeration",
+        "firstfail_split": "first_fail with bisection instead of enumeration",
+        "geometric": "Geometric restart (1.5x each time) with dom_w_deg",
+        "linear": "Linear restart (fixed increment) with dom_w_deg",
+        "norestart": "dom_w_deg WITHOUT restart (baseline)",
     }
     for name in STRATEGIES.keys():
-        desc = descriptions.get(name, "Nessuna descrizione")
+        desc = descriptions.get(name, "No description")
         print(f"  {name:<18} - {desc}")
 
 
 def count_cycles(vec):
-    """Calcola il numero di cicli per determinare il k minimo teorico (CP_2025_10)"""
+    """Calculate the number of cycles to determine the theoretical minimum k (CP_2025_10)"""
     n = len(vec)
     visited = [False] * n
     cycles = 0
@@ -170,12 +170,12 @@ def count_cycles(vec):
             curr = i
             while not visited[curr]:
                 visited[curr] = True
-                curr = vec[curr] - 1 # Il valore v e in posizione v-1
+                curr = vec[curr] - 1 # Value v is at position v-1
     return cycles
 
 
 def solve_with_strategy(solver, n, start_v, strategy_code, timeout_sec=TIMEOUT_SEC):
-    """Risolve un'istanza con una strategia specifica usando iterative deepening."""
+    """Solve an instance with a specific strategy using iterative deepening."""
     with open(TEMPLATE_FILE, "r") as f:
         template_content = f.read()
 
@@ -183,8 +183,8 @@ def solve_with_strategy(solver, n, start_v, strategy_code, timeout_sec=TIMEOUT_S
     model = minizinc.Model()
     model.add_string(model_code)
 
-    # Calcola k_min teorico dalla decomposizione in cicli
-    # In un piano minimo, k = N - numero_cicli
+    # Calculate theoretical k_min from cycle decomposition
+    # In a minimum plan, k = N - number_of_cycles
     k_min = n - count_cycles(start_v)
 
     k = max(1, k_min)
@@ -203,7 +203,7 @@ def solve_with_strategy(solver, n, start_v, strategy_code, timeout_sec=TIMEOUT_S
                 elapsed = raw_time.total_seconds() if isinstance(raw_time, timedelta) else float(raw_time)
                 return k, elapsed, result
             elif result.status == minizinc.Status.UNSATISFIABLE:
-                k += 1  # Incrementa k (teoricamente k_min dovrebbe bastare)
+                k += 1  # Increment k (theoretically k_min should suffice)
             else:
                 return -1, float('inf'), None
         except Exception:
@@ -214,23 +214,23 @@ def solve_with_strategy(solver, n, start_v, strategy_code, timeout_sec=TIMEOUT_S
 
 
 def save_detailed_file(folder, idx, n, vec, strat_name, k, time_val, result, timeout_sec):
-    """Salva i risultati in formato leggibile per l'uomo"""
+    """Save results in human-readable format"""
     filename = f"result_{idx:02d}_N{n}.txt"
     filepath = os.path.join(folder, filename)
     with open(filepath, "w") as f:
         f.write("="*60 + "\n")
-        f.write(f"BENCHMARK ID: {idx} | DIMENSIONE: {n} | STRATEGIA: {strat_name}\n")
+        f.write(f"BENCHMARK ID: {idx} | SIZE: {n} | STRATEGY: {strat_name}\n")
         f.write("="*60 + "\n\n")
         f.write(f"Input Vector: {vec}\n\n")
         if k != -1 and result is not None:
-            f.write(f"STATO: RISOLTO\nK: {k}\nTEMPO: {time_val:.4f}s\n")
-            f.write("-" * 40 + "\nPIANO:\n" + str(result))
+            f.write(f"STATUS: SOLVED\nK: {k}\nTIME: {time_val:.4f}s\n")
+            f.write("-" * 40 + "\nPLAN:\n" + str(result))
         else:
-            f.write(f"STATO: FALLITO / TIMEOUT (> {timeout_sec}s)\n")
+            f.write(f"STATUS: FAILED / TIMEOUT (> {timeout_sec}s)\n")
 
 
 def generate_benchmarks(sizes, instances_per_size):
-    """Genera le istanze di benchmark"""
+    """Generate benchmark instances"""
     benchmarks = []
     for n in sizes:
         for _ in range(instances_per_size):
@@ -242,8 +242,8 @@ def generate_benchmarks(sizes, instances_per_size):
 
 def run_strategy_benchmark(strat_name, tasks, timeout_sec, csv_path, run_dir):
     """
-    Esegue il benchmark per una singola strategia su tutte le istanze.
-    Questa funzione viene eseguita in un thread separato.
+    Run benchmark for a single strategy on all instances.
+    This function is executed in a separate thread.
     """
     solver = minizinc.Solver.lookup(SOLVER_NAME)
     strat_code = STRATEGIES[strat_name]
@@ -260,14 +260,14 @@ def run_strategy_benchmark(strat_name, tasks, timeout_sec, csv_path, run_dir):
         status_str = "OK" if k != -1 else "TIMEOUT"
         time_str = f"{t_elapsed:.4f}" if k != -1 else f">{timeout_sec}s"
 
-        # Stampa thread-safe
+        # Thread-safe print
         with print_lock:
             print(f"#{instance_id:<4} | {n:<3} | {strat_name:<25} | {str(k):<3} | {time_str:<10}")
 
-        # Salva file dettagliato
+        # Save detailed file
         save_detailed_file(folder_path, instance_id, n, vec, strat_name, k, t_elapsed, res_obj, timeout_sec)
 
-        # Scrittura CSV thread-safe
+        # Thread-safe CSV writing
         with csv_lock:
             with open(csv_path, "a", newline='') as csvfile:
                 csv.writer(csvfile).writerow([
@@ -288,7 +288,7 @@ def run_strategy_benchmark(strat_name, tasks, timeout_sec, csv_path, run_dir):
 
 
 def run_sequential(selected_strategies, tasks, timeout_sec, csv_path, run_dir):
-    """Esegue il benchmark in modalità sequenziale (comportamento originale)"""
+    """Run benchmark in sequential mode (original behavior)"""
     solver = minizinc.Solver.lookup(SOLVER_NAME)
 
     for i, (n, vec) in enumerate(tasks):
@@ -317,91 +317,91 @@ def run_sequential(selected_strategies, tasks, timeout_sec, csv_path, run_dir):
 
 
 def run_parallel(selected_strategies, tasks, timeout_sec, csv_path, max_workers, run_dir):
-    """Esegue il benchmark in modalità parallela (un thread per strategia)"""
-    print(f"\nModalità PARALLELA: {max_workers} thread (una strategia per thread)")
+    """Run benchmark in parallel mode (one thread per strategy)"""
+    print(f"\nPARALLEL mode: {max_workers} threads (one strategy per thread)")
     print("-" * 85)
 
     completed = 0
     total_strategies = len(selected_strategies)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Sottometti un task per ogni strategia
+        # Submit one task per strategy
         future_to_strategy = {
             executor.submit(run_strategy_benchmark, strat_name, tasks, timeout_sec, csv_path, run_dir): strat_name
             for strat_name in selected_strategies
         }
 
-        # Raccogli i risultati man mano che completano
+        # Collect results as they complete
         for future in as_completed(future_to_strategy):
             strat_name = future_to_strategy[future]
             try:
                 strategy, results = future.result()
                 completed += 1
 
-                # Calcola statistiche per questa strategia
+                # Calculate statistics for this strategy
                 solved = sum(1 for r in results if r['status'] == 'OK')
                 total = len(results)
                 avg_time = sum(r['time'] for r in results if r['status'] == 'OK') / max(solved, 1)
 
                 with print_lock:
-                    print(f"\n[{completed}/{total_strategies}] Strategia '{strategy}' completata:")
-                    print(f"   Risolte: {solved}/{total} | Tempo medio: {avg_time:.4f}s")
+                    print(f"\n[{completed}/{total_strategies}] Strategy '{strategy}' completed:")
+                    print(f"   Solved: {solved}/{total} | Average time: {avg_time:.4f}s")
 
             except Exception as e:
                 with print_lock:
-                    print(f"\nErrore nella strategia '{strat_name}': {e}")
+                    print(f"\nError in strategy '{strat_name}': {e}")
 
 
 if __name__ == "__main__":
     args = parse_args()
 
-    # Mostra lista strategie ed esci
+    # Show strategy list and exit
     if args.list:
         list_strategies()
         exit(0)
 
-    # Determina quali strategie eseguire
+    # Determine which strategies to run
     if args.all:
         selected_strategies = list(STRATEGIES.keys())
     elif args.strategies:
-        # Valida le strategie specificate
+        # Validate specified strategies
         invalid = [s for s in args.strategies if s not in STRATEGIES]
         if invalid:
-            print(f"Errore: strategie non valide: {', '.join(invalid)}")
-            print(f"Strategie disponibili: {', '.join(STRATEGIES.keys())}")
+            print(f"Error: invalid strategies: {', '.join(invalid)}")
+            print(f"Available strategies: {', '.join(STRATEGIES.keys())}")
             exit(1)
         selected_strategies = args.strategies
     else:
-        # Se nessuna strategia specificata, mostra help
-        print("Errore: specifica almeno una strategia o usa --all")
-        print("Usa --help per vedere le opzioni disponibili")
-        print("Usa --list per vedere le strategie disponibili")
+        # If no strategy specified, show help
+        print("Error: specify at least one strategy or use --all")
+        print("Use --help to see available options")
+        print("Use --list to see available strategies")
         exit(1)
 
-    # Rimuovi duplicati mantenendo l'ordine
+    # Remove duplicates while maintaining order
     selected_strategies = list(dict.fromkeys(selected_strategies))
 
     timeout_sec = args.timeout
 
-    # Determina numero di worker
+    # Determine number of workers
     if args.workers:
         max_workers = args.workers
     else:
         max_workers = len(selected_strategies)
 
     if not os.path.exists(TEMPLATE_FILE):
-        print(f"ERRORE: Manca {TEMPLATE_FILE}")
+        print(f"ERROR: Missing {TEMPLATE_FILE}")
         exit(1)
 
     if not os.path.exists(OUTPUT_ROOT):
         os.makedirs(OUTPUT_ROOT)
 
-    # Genera timestamp per questa esecuzione
+    # Generate timestamp for this run
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = os.path.join(OUTPUT_ROOT, timestamp)
     os.makedirs(run_dir)
 
-    # Crea cartelle solo per le strategie selezionate
+    # Create folders only for selected strategies
     for strat_name in selected_strategies:
         folder_name = STRATEGY_FOLDER_NAMES[strat_name]
         path = os.path.join(run_dir, folder_name)
@@ -410,23 +410,23 @@ if __name__ == "__main__":
 
     tasks = generate_benchmarks(args.sizes, args.instances)
 
-    # Nome CSV con timestamp
+    # CSV name with timestamp
     csv_filename = f"summary_{timestamp}.csv"
     csv_path = os.path.join(run_dir, csv_filename)
     with open(csv_path, "w", newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["ID", "N", "Strategy", "K", "Time", "Status"])
 
-    print(f"\n=== BENCHMARK COMPARATIVO ===")
+    print(f"\n=== COMPARATIVE BENCHMARK ===")
     print(f"Timestamp: {timestamp}")
-    print(f"Strategie: {', '.join(selected_strategies)}")
-    print(f"Dimensioni: {args.sizes}")
-    print(f"Istanze per dimensione: {args.instances}")
+    print(f"Strategies: {', '.join(selected_strategies)}")
+    print(f"Sizes: {args.sizes}")
+    print(f"Instances per size: {args.instances}")
     print(f"Timeout: {timeout_sec}s")
-    print(f"Totale test: {len(tasks)} istanze × {len(selected_strategies)} strategie = {len(tasks) * len(selected_strategies)} esecuzioni")
+    print(f"Total tests: {len(tasks)} instances x {len(selected_strategies)} strategies = {len(tasks) * len(selected_strategies)} executions")
 
     if args.sequential:
-        print(f"Modalità: SEQUENZIALE")
+        print(f"Mode: SEQUENTIAL")
         print("-" * 85)
         print(f"{'Inst':<5} | {'N':<3} | {'Strategy':<25} | {'K':<3} | {'Time (s)':<10}")
         print("-" * 85)
@@ -435,7 +435,7 @@ if __name__ == "__main__":
         run_sequential(selected_strategies, tasks, timeout_sec, csv_path, run_dir)
         total_time = time.time() - start_time
     else:
-        print(f"Modalità: PARALLELA ({max_workers} thread)")
+        print(f"Mode: PARALLEL ({max_workers} threads)")
         print("-" * 85)
         print(f"{'Inst':<5} | {'N':<3} | {'Strategy':<25} | {'K':<3} | {'Time (s)':<10}")
         print("-" * 85)
@@ -444,9 +444,9 @@ if __name__ == "__main__":
         run_parallel(selected_strategies, tasks, timeout_sec, csv_path, max_workers, run_dir)
         total_time = time.time() - start_time
 
-    print(f"\n=== COMPLETATO ===")
-    print(f"Tempo totale: {total_time:.2f}s")
-    print(f"Risultati salvati in: {run_dir}/")
-    print(f"Riepilogo CSV: {csv_path}")
-    print(f"\nPer generare i grafici:")
+    print(f"\n=== COMPLETED ===")
+    print(f"Total time: {total_time:.2f}s")
+    print(f"Results saved in: {run_dir}/")
+    print(f"Summary CSV: {csv_path}")
+    print(f"\nTo generate plots:")
     print(f"  python plot.py {csv_path}")

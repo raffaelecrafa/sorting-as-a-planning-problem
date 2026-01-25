@@ -3,70 +3,70 @@ include "globals.mzn";
 % =============================================================================
 % INPUT
 % =============================================================================
-int: n;                       % Dimensione del vettore
-array[1..n] of int: start_v;  % Permutazione iniziale
-int: k;                       % Lunghezza del piano (swap da eseguire)
+int: n;                       % Vector size
+array[1..n] of int: start_v;  % Initial permutation
+int: k;                       % Plan length (number of swaps to perform)
 
 % =============================================================================
-% VARIABILI DECISIONALI
+% DECISION VARIABLES
 % =============================================================================
 
-% Matrice degli stati: v[t, p] = valore in posizione p al tempo t
+% State matrix: v[t, p] = value at position p at time t
 array[0..k, 1..n] of var 1..n: v;
 
-% Modello duale per channeling: pos[t, i] = posizione del valore i al tempo t
+% Dual model for channeling: pos[t, i] = position of value i at time t
 array[0..k, 1..n] of var 1..n: pos;
 
-% Indici dello swap al passo t
+% Swap indices at step t
 array[0..k-1] of var 1..n: idx1;
 array[0..k-1] of var 1..n: idx2;
 
 % =============================================================================
-% VARIABILE AUSILIARIA PER LA RICERCA
+% AUXILIARY VARIABLE FOR SEARCH
 % =============================================================================
-% all_moves: array "piatto" che contiene tutte le mosse in sequenza
+% all_moves: flat array containing all moves in sequence
 %
-% Struttura: [idx1[0], idx2[0], idx1[1], idx2[1], ..., idx1[k-1], idx2[k-1]]
+% Structure: [idx1[0], idx2[0], idx1[1], idx2[1], ..., idx1[k-1], idx2[k-1]]
 %
-% Questa variabile permette di specificare strategie di ricerca che operano
-% su TUTTE le mosse contemporaneamente, invece che sulla matrice v.
+% This variable allows specifying search strategies that operate on
+% ALL moves simultaneously, rather than on the state matrix v.
 %
-% PERCHÉ È UTILE:
-% - Le variabili idx1 e idx2 sono quelle che determinano effettivamente la
-%   struttura del piano (v è derivata dalle mosse)
-% - Concentrare la ricerca sulle mosse è spesso più efficiente
-% - Permette euristiche come first_fail e dom_w_deg di operare sulle
-%   variabili più "importanti"
+% WHY IS IT USEFUL:
+% - The variables idx1 and idx2 are the ones that actually determine
+%   the plan structure (v is derived from the moves)
+% - Focusing the search on moves is often more efficient
+% - Allows heuristics like first_fail and dom_w_deg to operate on
+%   the most "important" variables
 % =============================================================================
 
 array[1..2*k] of var 1..n: all_moves = [
     if i mod 2 == 1
-    then idx1[i div 2]      % Posizioni dispari: idx1[0], idx1[1], ...
-    else idx2[(i-1) div 2]  % Posizioni pari: idx2[0], idx2[1], ...
+    then idx1[i div 2]      % Odd positions: idx1[0], idx1[1], ...
+    else idx2[(i-1) div 2]  % Even positions: idx2[0], idx2[1], ...
     endif
     | i in 1..2*k
 ];
 
 
 % =============================================================================
-% VINCOLO 1: CONDIZIONI AL CONTORNO
+% CONSTRAINT 1: BOUNDARY CONDITIONS
 % =============================================================================
-% Stato iniziale = permutazione di input
-% Stato finale = permutazione identità (v[k, p] = p per ogni p)
+% Initial state = input permutation
+% Final state = identity permutation (v[k, p] = p for all p)
 %
-% NOTA: Il vincolo v[k, p] = p è più forte di v[k, p] <= v[k, p+1]
-%       e migliora la propagazione backward. Viene ripetuto nel vincolo 6
-%       per chiarezza, ma il solver lo ottimizza automaticamente.
+% NOTE: The constraint v[k, p] = p is stronger than v[k, p] <= v[k, p+1]
+%       and improves backward propagation. It is repeated in constraint 6
+%       for clarity, but the solver optimizes it automatically.
 % =============================================================================
 
 constraint forall(p in 1..n) (v[0, p] = start_v[p]);
 
 
 % =============================================================================
-% VINCOLO 2: CHANNELING & GAC
+% CONSTRAINT 2: CHANNELING & GAC
 % =============================================================================
-% Collega v (valore→posizione) con pos (posizione→valore) tramite inverse.
-% Usa alldifferent con GAC per massima propagazione.
+% Links v (value->position) with pos (position->value) via inverse.
+% Uses alldifferent with GAC for maximum propagation.
 % =============================================================================
 
 constraint forall(t in 0..k) (
@@ -76,25 +76,25 @@ constraint forall(t in 0..k) (
 
 
 % =============================================================================
-% VINCOLO 3: SWAP OTTIMALE (Group Theory Lower Bound)
+% CONSTRAINT 3: OPTIMAL SWAP (Group Theory Lower Bound)
 % =============================================================================
-% Ogni mossa DEVE fissare almeno un elemento nella sua posizione corretta.
-% Questo deriva dalla teoria dei gruppi sulle permutazioni e garantisce che
-% il piano sia di lunghezza minima.
+% Each move MUST fix at least one element in its correct position.
+% This derives from group theory on permutations and guarantees that
+% the plan is of minimum length.
 % =============================================================================
 
 constraint forall(t in 0..k-1) (
-    % Symmetry breaking: primo indice sempre minore del secondo
+    % Symmetry breaking: first index always less than the second
     idx1[t] < idx2[t] /\
 
-    % Proprietà di ottimalità: lo swap sistema almeno un elemento
+    % Optimality property: the swap fixes at least one element
     (v[t, idx2[t]] = idx1[t] \/ v[t, idx1[t]] = idx2[t]) /\
 
-    % Meccanica dello swap
+    % Swap mechanics
     v[t+1, idx1[t]] = v[t, idx2[t]] /\
     v[t+1, idx2[t]] = v[t, idx1[t]] /\
 
-    % Frame Axiom: posizioni non coinvolte rimangono invariate
+    % Frame Axiom: positions not involved remain unchanged
     forall(p in 1..n where p != idx1[t] /\ p != idx2[t]) (
         v[t+1, p] = v[t, p]
     )
@@ -102,11 +102,11 @@ constraint forall(t in 0..k-1) (
 
 
 % =============================================================================
-% VINCOLO 4: SYMMETRY BREAKING (Swap Disgiunti)
+% CONSTRAINT 4: SYMMETRY BREAKING (Disjoint Swaps)
 % =============================================================================
-% Ordina lessicograficamente gli swap che non condividono posizioni.
-% Due swap disgiunti possono essere eseguiti in qualsiasi ordine, quindi
-% imponiamo un ordine canonico per eliminare soluzioni simmetriche.
+% Lexicographically orders swaps that do not share positions.
+% Two disjoint swaps can be executed in any order, so we impose
+% a canonical order to eliminate symmetric solutions.
 % =============================================================================
 
 constraint forall(t in 0..k-2) (
@@ -119,11 +119,11 @@ constraint forall(t in 0..k-2) (
 );
 
 % =============================================================================
-% VINCOLO 5: FIXED POINT PROPAGATION
+% CONSTRAINT 5: FIXED POINT PROPAGATION
 % =============================================================================
-% Se un elemento è nella sua posizione corretta (v[t, p] = p), quella posizione
-% non deve MAI più essere coinvolta in swap futuri.
-% Razionale: uno swap su un punto fisso lo "spiazzerebbe" inutilmente.
+% If an element is in its correct position (v[t, p] = p), that position
+% must NEVER be involved in future swaps.
+% Rationale: a swap on a fixed point would displace it unnecessarily.
 % =============================================================================
 
 constraint forall(t in 0..k-1, p in 1..n) (
@@ -132,23 +132,23 @@ constraint forall(t in 0..k-1, p in 1..n) (
 
 
 % =============================================================================
-% VINCOLO 6: STATO FINALE ESPLICITO (IDENTITÀ)
+% CONSTRAINT 6: EXPLICIT FINAL STATE (IDENTITY)
 % =============================================================================
-% Lo stato finale deve essere esattamente la permutazione identità.
-% Anche se implicito dal vincolo di ordinamento, renderlo esplicito
-% può migliorare la propagazione backward.
+% The final state must be exactly the identity permutation.
+% Although implicit from the ordering constraint, making it explicit
+% can improve backward propagation.
 % =============================================================================
 
 constraint forall(p in 1..n) (v[k, p] = p);
 
 
 % =============================================================================
-% VINCOLO 7: NO SWAP RIPETUTI (GLOBAL)
+% CONSTRAINT 7: NO REPEATED SWAPS (GLOBAL)
 % =============================================================================
-% Ogni coppia (i, j) può apparire AL MASSIMO UNA VOLTA nel piano.
-% In una soluzione ottimale, ripetere uno swap è sempre inutile:
-% - Se (i,j) appare due volte consecutive: si annullano
-% - Se (i,j) appare non consecutive: esiste un piano più corto
+% Each pair (i, j) can appear AT MOST ONCE in the plan.
+% In an optimal solution, repeating a swap is always useless:
+% - If (i,j) appears twice consecutively: they cancel out
+% - If (i,j) appears non-consecutively: a shorter plan exists
 % =============================================================================
 
 constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
@@ -157,82 +157,82 @@ constraint forall(t1 in 0..k-2, t2 in t1+1..k-1) (
 
 
 % =============================================================================
-% STRATEGIA DI RICERCA (PLACEHOLDER)
+% SEARCH STRATEGY (PLACEHOLDER)
 % =============================================================================
-% Questo placeholder viene sostituito dinamicamente da benchmark_strategies.py
-% con una delle seguenti strategie:
+% This placeholder is dynamically replaced by benchmark_strategies.py
+% with one of the following strategies:
 %
-% STRATEGIE BASE:
-% ---------------
+% BASE STRATEGIES:
+% ----------------
 % 1. DEFAULT:
 %    solve :: restart_luby(250) satisfy;
-%    → Usa l'euristica di default di Gecode
+%    -> Uses Gecode's default heuristic
 %
 % 2. FIRSTFAIL:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, first_fail, indomain_random, complete) satisfy;
-%    → first_fail: sceglie la variabile con dominio più piccolo
+%    -> first_fail: chooses variable with smallest domain
 %
 % 3. DOMWDEG:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
-%    → dom_w_deg: domain / weighted degree (euristica adattiva)
-%    → Impara dai fallimenti: penalizza variabili "problematiche"
+%    -> dom_w_deg: domain / weighted degree (adaptive heuristic)
+%    -> Learns from failures: penalizes "problematic" variables
 %
-% STRATEGIE AVANZATE DI SELEZIONE VARIABILE:
-% ------------------------------------------
+% ADVANCED VARIABLE SELECTION STRATEGIES:
+% ---------------------------------------
 % 4. SMALLEST:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, smallest, indomain_min, complete) satisfy;
-%    → smallest: sceglie variabile con valore minimo nel dominio
+%    -> smallest: chooses variable with minimum value in domain
 %
 % 5. MOSTCONSTRAINED:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, most_constrained, indomain_random, complete) satisfy;
-%    → most_constrained: first_fail + numero di vincoli (più aggressivo)
+%    -> most_constrained: first_fail + constraint count (more aggressive)
 %
 % 6. MAXREGRET:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, max_regret, indomain_random, complete) satisfy;
-%    → max_regret: massimizza differenza tra miglior e secondo valore
+%    -> max_regret: maximizes difference between best and second-best value
 %
 % 7. ANTIFIRSTFAIL:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, anti_first_fail, indomain_random, complete) satisfy;
-%    → anti_first_fail: sceglie variabile con dominio PIÙ GRANDE
+%    -> anti_first_fail: chooses variable with LARGEST domain
 %
-% STRATEGIE CON BISECTION:
-% ------------------------
+% BISECTION STRATEGIES:
+% ---------------------
 % 8. DOMWDEG_SPLIT:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, dom_w_deg, indomain_split, complete) satisfy;
-%    → indomain_split: divide il dominio a metà invece di enumerare
+%    -> indomain_split: splits domain in half instead of enumerating
 %
 % 9. FIRSTFAIL_SPLIT:
 %    solve :: restart_luby(250)
 %          :: int_search(all_moves, first_fail, indomain_split, complete) satisfy;
-%    → Combina first_fail con bisection
+%    -> Combines first_fail with bisection
 %
-% STRATEGIE CON RESTART ALTERNATIVI:
-% ----------------------------------
+% ALTERNATIVE RESTART STRATEGIES:
+% -------------------------------
 % 10. GEOMETRIC:
 %     solve :: restart_geometric(1.5, 100)
 %           :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
-%     → Restart geometrico: scala × 1.5 ogni volta (100, 150, 225, ...)
+%     -> Geometric restart: scales x1.5 each time (100, 150, 225, ...)
 %
 % 11. LINEAR:
 %     solve :: restart_linear(250)
 %           :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
-%     → Restart lineare: incremento fisso (250, 500, 750, ...)
+%     -> Linear restart: fixed increment (250, 500, 750, ...)
 %
 % 12. NORESTART:
 %     solve :: int_search(all_moves, dom_w_deg, indomain_random, complete) satisfy;
-%     → NESSUN restart - baseline per confronto
+%     -> NO restart - baseline for comparison
 %
-% LUBY RESTART (usato da strategie 1-9):
-%    Sequenza: 1,1,2,1,1,2,4,1,1,2,1,1,2,4,8,...
-%    Scala: 250 (riavvia dopo 250×L fallimenti)
-%    Scopo: sfuggire a zone "morte" dello spazio di ricerca
+% LUBY RESTART (used by strategies 1-9):
+%    Sequence: 1,1,2,1,1,2,4,1,1,2,1,1,2,4,8,...
+%    Scale: 250 (restarts after 250*L failures)
+%    Purpose: escape "dead" zones of the search space
 % =============================================================================
 
 {{SOLVE_STRATEGY}}
