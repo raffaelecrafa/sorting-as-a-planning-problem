@@ -66,6 +66,19 @@ The \texttt{mostconstrained} strategy already struggles at $N = 15$ with an aver
 
 Comparing \texttt{norestart} with other strategies clearly demonstrates the benefit of restart mechanisms: without restarts, solving time explodes from 0.32s at $N = 5$ to 247.54s at $N = 30$. This three-orders-of-magnitude increase underscores how easily the solver can get trapped in unproductive search regions.
 
+\subsection{Plan Length Analysis (K Distribution)}
+
+Beyond execution time, the actual solution quality—measured by the number of swaps required ($k$)—is an important metric. Figure~\ref{fig:k_histograms} shows the distribution of plan lengths for each strategy across all solved instances.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\textwidth]{img/20_k_histograms_all12.pdf}
+    \caption{Distribution of plan length (K) for all 12 strategies. Each histogram shows the frequency of each $k$ value observed across all solved instances. Title annotations include the minimum, maximum, and mean plan length for each strategy, providing insight into both the range and central tendency of solution quality.}
+    \label{fig:k_histograms}
+\end{figure}
+
+This visualization reveals an important insight: different strategies tend to find plans of similar lengths (since $k$ is determined by the problem structure), but the distribution shapes vary considerably. Some strategies produce tightly clustered distributions (indicating consistent solution quality), while others exhibit wider spreads. The histogram representation makes it easy to identify outliers and understand the variability in solution quality across runs.
+
 \subsection{Strategy Ranking}
 
 Figure~\ref{fig:ranking} presents the overall ranking of strategies based on average solving time (computed only on successfully solved instances).
