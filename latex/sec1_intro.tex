@@ -34,30 +34,7 @@ This problem naturally maps to a \textbf{discrete planning problem}:
     \item \textbf{Horizon:} The number of timesteps $k$ (plan length).
 \end{itemize}
 
-The problem is modeled as a \textbf{Constraint Satisfaction Problem (CSP)} where, for a fixed horizon $k$, the solver must determine whether a valid plan exists. The minimum $k$ is found via \textbf{Iterative Deepening}: we start with $k=k_{\min}$ (a theoretical lower bound) and increment $k$ until a satisfiable solution is found.
-
-\subsection{Theoretical Lower Bound: Cycle Decomposition}
-
-From \textbf{Group Theory}, every permutation can be decomposed into disjoint cycles. The minimum number of swaps required to sort a permutation is:
-\begin{equation}
-    k_{\min} = n - c
-\end{equation}
-where $c$ is the number of disjoint cycles in the permutation.
-
-\paragraph{Cycle Decomposition.} Any permutation can be decomposed into disjoint \textbf{cycles}. A cycle describes a closed chain of positions where elements need to ``rotate'' to reach their correct places. To find cycles, we start at position $i$, follow the chain $i \to v[i] \to v[v[i]] \to \cdots$ until returning to $i$, then repeat for unvisited positions.
-
-\paragraph{Example.} For $\vec{v} = [2, 3, 1, 5, 4]$:
-\begin{itemize}
-    \item \textbf{Cycle 1:} $1 \to 2 \to 3 \to 1$ (positions 1, 2, 3 form a cycle of length 3)
-    \item \textbf{Cycle 2:} $4 \to 5 \to 4$ (positions 4, 5 form a cycle of length 2)
-\end{itemize}
-Total: $c = 2$ cycles.
-
-\paragraph{Minimum Swaps.} A cycle of length $\ell$ requires exactly $\ell - 1$ swaps to sort. Therefore:
-\[
-k_{\min} = \sum_{i=1}^{c} (\ell_i - 1) = n - c
-\]
-For our example: $(3-1) + (2-1) = 3$ swaps, matching $k_{\min} = 5 - 2 = 3$.
+The problem is modeled as a \textbf{Constraint Satisfaction Problem (CSP)} where, for a fixed horizon $k$, the solver must determine whether a valid plan exists. The minimum $k$ is found via \textbf{Iterative Deepening}: we start with $k=k_{\min}$ (a lower bound computed from cycle decomposition) and increment $k$ until a satisfiable solution is found.
 
 \subsection{Project Structure}
 

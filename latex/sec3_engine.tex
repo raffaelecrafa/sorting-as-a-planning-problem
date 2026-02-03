@@ -28,9 +28,17 @@ This produces:
     \item 10 instances for $N=30$ (instances 51--60)
 \end{itemize}
 
-\subsection{Cycle Decomposition for Lower Bound}
+\subsection{Optimization: Smart Lower Bound Starting Point}
 
-Instead of starting with $k=1$ and incrementing blindly, we compute the theoretical minimum using cycle decomposition:
+To accelerate solving, instead of starting iterative deepening from $k=1$, we employ an optimization technique based on cycle decomposition to compute an intelligent starting point. This avoids wasting iterations on values of $k$ that are provably too small.
+
+\paragraph{The Lower Bound Formula.} Every permutation can be decomposed into disjoint cycles. The minimum number of moves needed to sort a permutation is given by:
+\begin{equation}
+    k_{\min} = n - c
+\end{equation}
+where $n$ is the length of the permutation and $c$ is the number of disjoint cycles. This bound is fundamental: a cycle of length $\ell$ requires exactly $\ell - 1$ swaps to resolve. Since there are $c$ cycles in total, and the sum of their lengths is $n$, the total number of swaps is $\sum_{i=1}^{c}(\ell_i - 1) = n - c$.
+
+The implementation computes this lower bound as follows:
 
 \begin{lstlisting}[language=Python]
 def count_cycles(perm):
@@ -49,7 +57,7 @@ def count_cycles(perm):
 def compute_starting_k(perm):
     n = len(perm)
     num_cycles = count_cycles(perm)
-    k_min = n - num_cycles  # Theoretical lower bound
+    k_min = n - num_cycles  # Lower bound from cycle decomposition
 
     # Parity correction
     initial_inv = count_inversions(perm)
@@ -58,7 +66,9 @@ def compute_starting_k(perm):
     return k_min
 \end{lstlisting}
 
-The cycle decomposition gives us the exact minimum for most permutations. The parity check ensures we don't start with an impossible $k$ value (which would waste one iteration).
+The parity correction ensures consistency with the Parity Invariant constraint (Section 2.3): every swap changes the parity of the permutation, so the number of swaps must have the same parity as the initial number of inversions.
+
+This optimization allows the iterative deepening loop to begin searching near the actual optimum rather than from $k=1$, providing dramatic speedups especially for larger instances.
 
 \subsection{Iterative Deepening with Intelligent Start}
 

@@ -99,8 +99,4 @@ The experimental results lead to several important conclusions regarding search 
 
 \paragraph{Most-constrained is misleading.} Despite its name, the \texttt{mostconstrained} heuristic (selecting the variable involved in the most constraints) fails completely for larger instances. This suggests that constraint count is not a good proxy for variable importance in our model, where all move variables participate in similar constraint structures.
 
-\subsection{Future Work}
 
-A natural direction for future work is to compare the constraint programming approach not only in terms of execution time, but also in terms of memory accesses and the number of swaps performed, with respect to classical sorting algorithms such as quicksort, mergesort, or bubble sort. This would provide a more meaningful comparison of the computational effort required by different paradigms, especially since classical algorithms are highly optimized for time but may differ in the number of elementary operations.
-
-Another interesting extension would be to experiment with new constraints or to adapt the model to handle vectors with arbitrary values, not just permutations of $1$ to $N$. This would allow the approach to be applied to a wider range of sorting problems, including those with repeated or missing values, and could require the development of new constraint formulations or search strategies.

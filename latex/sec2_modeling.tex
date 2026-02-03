@@ -162,6 +162,14 @@ In an optimal plan, repeating the same swap is never useful:
     \item \textbf{Non-consecutive repetition:} If swap$(i,j)$ appears at times $t_1$ and $t_2$ ($t_1 < t_2$), the elements at positions $i$ and $j$ return to their original values after $t_2$. This implies the intermediate swaps could be reorganized into a shorter plan.
 \end{itemize}
 
+Since each distinct swap pair can appear at most once and there are $\binom{n}{2}$ possible pairs, we have:
+\begin{equation}
+    k \leq \binom{n}{2} = \frac{n(n-1)}{2}
+\end{equation}
+However, a much tighter bound holds for optimal plans. As we will discuss in Section 3.2, the minimum number of swaps needed is directly related to the cycle structure of the permutation, and in practice:
+\begin{equation}
+    k \leq n - 1
+\end{equation}
 This constraint has $O(k^2)$ comparisons, but since $k \leq n-1$ for optimal plans, the overhead is negligible.
 
 \subsection{Summary of Constraints}

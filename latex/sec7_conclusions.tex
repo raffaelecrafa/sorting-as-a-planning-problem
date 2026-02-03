@@ -1,3 +1,9 @@
-\section{Conclusions}
+\section{Conclusions and Future Work}
 
-This work shows that constraint programming, when paired with well-designed constraints and effective search strategies, can efficiently solve the sorting-as-planning problem even for challenging instances. The best results are achieved by combining strong propagation, mathematical insights (such as cycle decomposition), and restart policies. While no single strategy is always optimal, the "smallest" heuristic with Luby restarts proved both fast and reliable. The full code is available at: \url{https://github.com/raffaelecrafa/sorting-as-a-planning-problem}
+This work shows that constraint programming, when paired with well-designed constraints and effective search strategies, can efficiently solve the sorting-as-planning problem even for challenging instances. The best results are achieved by combining strong propagation, mathematical insights (such as cycle decomposition), and restart policies. While no single strategy is always optimal, the "smallest" heuristic with Luby restarts proved both fast and reliable.
+
+A natural direction for future work is to compare the constraint programming approach not only in terms of execution time, but also in terms of memory accesses and the number of swaps performed, with respect to classical sorting algorithms such as quicksort, mergesort, or bubble sort. This would provide a more meaningful comparison of the computational effort required by different paradigms, especially since classical algorithms are highly optimized for time but may differ in the number of elementary operations.
+
+Another interesting extension would be to experiment with new constraints or to adapt the model to handle vectors with arbitrary values, not just permutations of $1$ to $N$. This would allow the approach to be applied to a wider range of sorting problems, including those with repeated or missing values, and could require the development of new constraint formulations or search strategies.
+
+The full code is available at:\\ \url{https://github.com/raffaelecrafa/sorting-as-a-planning-problem}.
