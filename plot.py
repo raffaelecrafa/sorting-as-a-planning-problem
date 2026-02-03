@@ -301,25 +301,227 @@ def generate_performance_plots(csv_file):
     print(f"Saved: {OUTPUT_DIR}/11_dashboard.pdf")
 
     # =========================================================================
+    # GRAPH 12: HEATMAP OF AVERAGE K (Strategy x N)
+    # Shows the average plan length (K) for each strategy and size
+    # =========================================================================
+    plt.figure(figsize=(12, 8))
+    pivot_k = df_solved.pivot_table(values='K', index='Strategy', columns='N', aggfunc='mean')
+
+    sns.heatmap(pivot_k, annot=True, fmt='.2f', cmap='YlGnBu',
+                cbar_kws={'label': 'Average K (plan length)'})
+    plt.title('Heatmap: Average Plan Length (K) by Strategy and Size', fontsize=14)
+    plt.xlabel('Vector Size (N)')
+    plt.ylabel('Strategy')
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/12_heatmap_k.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/12_heatmap_k.pdf")
+
+    # =========================================================================
+    # GRAPH 13: BOXPLOT OF K BY STRATEGY
+    # Shows the distribution of plan lengths across all instances per strategy
+    # =========================================================================
+    plt.figure(figsize=(14, 7))
+    sns.boxplot(data=df_solved, x='Strategy', y='K', hue='Strategy', palette=palette, legend=False)
+    plt.title('Distribution of Plan Length (K) by Strategy', fontsize=14)
+    plt.xlabel('Strategy')
+    plt.ylabel('Plan Length (K)')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/13_boxplot_k.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/13_boxplot_k.pdf")
+
+    # =========================================================================
+    # GRAPH 14: AVERAGE K PER STRATEGY (Bar Plot)
+    # Ranking of strategies by average plan length
+    # =========================================================================
+    plt.figure(figsize=(12, 7))
+    avg_k_by_strategy = df_solved.groupby('Strategy')['K'].mean().sort_values()
+
+    colors = [palette[s] for s in avg_k_by_strategy.index]
+    bars = plt.barh(avg_k_by_strategy.index, avg_k_by_strategy.values, color=colors)
+    plt.xlabel('Average Plan Length (K)')
+    plt.ylabel('Strategy')
+    plt.title('Strategy Ranking: Average Plan Length', fontsize=14)
+
+    # Add values on bars
+    for bar, val in zip(bars, avg_k_by_strategy.values):
+        plt.text(val + 0.1, bar.get_y() + bar.get_height()/2,
+                f'{val:.2f}', va='center', fontsize=10)
+
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/14_ranking_k.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/14_ranking_k.pdf")
+
+    # =========================================================================
+    # GRAPH 15: VIOLIN PLOT OF K BY N
+    # Shows the distribution of K values for each size
+    # =========================================================================
+    plt.figure(figsize=(12, 7))
+    sns.violinplot(data=df_solved, x='N', y='K', hue='N', palette='Set2', inner='quartile', legend=False)
+    plt.title('Plan Length Distribution by Vector Size', fontsize=14)
+    plt.xlabel('Vector Size (N)')
+    plt.ylabel('Plan Length (K)')
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/15_violin_k_by_n.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/15_violin_k_by_n.pdf")
+
+    # =========================================================================
+    # GRAPH 16: K vs N (Line Plot with Strategy)
+    # Shows how K grows with N for different strategies
+    # =========================================================================
+    plt.figure(figsize=(12, 7))
+    avg_k_per_n = df_solved.groupby(['N', 'Strategy'])['K'].mean().reset_index()
+
+    sns.lineplot(data=avg_k_per_n, x='N', y='K', hue='Strategy',
+                marker='o', linewidth=2.5, palette=palette)
+    plt.title('Average Plan Length vs Vector Size', fontsize=14)
+    plt.xlabel('Vector Size (N)')
+    plt.ylabel('Average Plan Length (K)')
+    plt.legend(title='Strategy', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/16_k_vs_n.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/16_k_vs_n.pdf")
+
+    # =========================================================================
+    # GRAPH 17: MIN/MAX/AVG K PER STRATEGY
+    # Shows the range of K values (min, max, average) for each strategy
+    # =========================================================================
+    plt.figure(figsize=(14, 7))
+    k_stats = df_solved.groupby('Strategy')['K'].agg(['min', 'max', 'mean']).sort_values('mean')
+
+    x = np.arange(len(k_stats))
+    width = 0.25
+
+    bars1 = plt.bar(x - width, k_stats['min'], width, label='Min K', alpha=0.8, color='#2ecc71')
+    bars2 = plt.bar(x, k_stats['mean'], width, label='Avg K', alpha=0.8, color='#3498db')
+    bars3 = plt.bar(x + width, k_stats['max'], width, label='Max K', alpha=0.8, color='#e74c3c')
+
+    plt.xlabel('Strategy')
+    plt.ylabel('Plan Length (K)')
+    plt.title('Min/Max/Average Plan Length by Strategy', fontsize=14)
+    plt.xticks(x, k_stats.index, rotation=45, ha='right')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/17_k_minmaxavg.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/17_k_minmaxavg.pdf")
+
+    # =========================================================================
+    # GRAPH 18: K VALUE FREQUENCY HEATMAP (Strategy x K values)
+    # Shows how many times each K value appears for each strategy
+    # =========================================================================
+    plt.figure(figsize=(14, 8))
+    # Create a cross-tabulation of Strategy and K values
+    k_freq = pd.crosstab(df_solved['Strategy'], df_solved['K'])
+
+    sns.heatmap(k_freq, cmap='YlOrRd', cbar_kws={'label': 'Frequency'}, linewidths=0.5)
+    plt.title('Frequency Heatmap: K Values Distribution per Strategy', fontsize=14)
+    plt.xlabel('Plan Length (K)')
+    plt.ylabel('Strategy')
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/18_k_frequency_heatmap.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/18_k_frequency_heatmap.pdf")
+
+    # =========================================================================
+    # GRAPH 19: K RANGE PLOT (Min-Max span with average point)
+    # Shows the range of K values for each strategy with markers
+    # =========================================================================
+    plt.figure(figsize=(12, 8))
+    k_stats_sorted = k_stats.sort_values('mean')
+    y_pos = np.arange(len(k_stats_sorted))
+
+    # Plot the range (min to max) as horizontal lines
+    for i, (strategy, row) in enumerate(k_stats_sorted.iterrows()):
+        plt.plot([row['min'], row['max']], [i, i], 'o-', linewidth=3,
+                markersize=8, color=palette.get(strategy, 'gray'), alpha=0.6)
+        # Add mean as a distinct marker
+        plt.plot(row['mean'], i, 'D', markersize=10,
+                color=palette.get(strategy, 'gray'), zorder=5)
+
+    plt.yticks(y_pos, k_stats_sorted.index)
+    plt.xlabel('Plan Length (K)')
+    plt.ylabel('Strategy')
+    plt.title('K Value Range by Strategy (Min-Max with Average)', fontsize=14)
+    plt.grid(True, alpha=0.3, axis='x')
+
+    # Add custom legend
+    from matplotlib.lines import Line2D
+    legend_elements = [Line2D([0], [0], marker='o', color='gray', markerfacecolor='gray',
+                              markersize=8, linestyle='-', label='Min-Max Range'),
+                       Line2D([0], [0], marker='D', color='w', markerfacecolor='gray',
+                              markersize=10, label='Average')]
+    plt.legend(handles=legend_elements, loc='best')
+
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/19_k_range_plot.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/19_k_range_plot.pdf")
+
+    # =========================================================================
+    # GRAPH 20: K DISTRIBUTION AS HISTOGRAMS (All 12 strategies)
+    # Shows histogram of K values for all strategies
+    # =========================================================================
+    all_strategies = sorted(df_solved['Strategy'].unique())
+    n_strategies = len(all_strategies)
+    fig, axes = plt.subplots(4, 3, figsize=(14, 16))
+    axes = axes.flatten()
+
+    for idx, strategy in enumerate(all_strategies):
+        data = df_solved[df_solved['Strategy'] == strategy]['K']
+        ax = axes[idx]
+        ax.hist(data, bins=range(int(data.min()), int(data.max()) + 2),
+               color=palette[strategy], alpha=0.7, edgecolor='black')
+        ax.set_title(f'{strategy}\n(Min:{data.min():.0f}, Max:{data.max():.0f}, Mean:{data.mean():.2f})',
+                    fontsize=10)
+        ax.set_xlabel('Plan Length (K)')
+        ax.set_ylabel('Frequency')
+        ax.grid(True, alpha=0.3)
+
+    # Hide unused subplots (if any)
+    for idx in range(n_strategies, len(axes)):
+        axes[idx].set_visible(False)
+
+    plt.suptitle('K Distribution Histograms: All 12 Strategies', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(f"{OUTPUT_DIR}/20_k_histograms_all12.pdf", dpi=150)
+    plt.close()
+    print(f"Saved: {OUTPUT_DIR}/20_k_histograms_all12.pdf")
+
+    # =========================================================================
     # FINAL SUMMARY
     # =========================================================================
     print("\n" + "="*60)
     print("SUMMARY OF GENERATED GRAPHS")
     print("="*60)
     print(f"Output directory: {OUTPUT_DIR}/")
-    print(f"Total graphs: 11")
+    print(f"Total graphs: 20")
     print("\nGenerated graphs:")
-    print("  01_tempo_vs_n.pdf       - Average time vs size (line)")
-    print("  02_successo_vs_n.pdf    - Solved instances per N (bar)")
-    print("  03_boxplot_tempi.pdf    - Time distribution by strategy")
-    print("  04_heatmap_tempo.pdf    - Time heatmap (Strategy x N)")
-    print("  05_heatmap_successo.pdf - Success % heatmap (Strategy x N)")
-    print("  06_ranking_strategie.pdf- Strategy ranking by avg time")
-    print("  07_violin_plot.pdf      - Detailed distribution per N")
-    print("  08_speedup.pdf          - Relative speedup vs baseline")
+    print("  01_tempo_vs_n.pdf         - Average time vs size (line)")
+    print("  02_successo_vs_n.pdf      - Solved instances per N (bar)")
+    print("  03_boxplot_tempi.pdf      - Time distribution by strategy")
+    print("  04_heatmap_tempo.pdf      - Time heatmap (Strategy x N)")
+    print("  05_heatmap_successo.pdf   - Success % heatmap (Strategy x N)")
+    print("  06_ranking_strategie.pdf  - Strategy ranking by avg time")
+    print("  07_violin_plot.pdf        - Detailed distribution per N")
+    print("  08_speedup.pdf            - Relative speedup vs baseline")
     print("  09_stabilita_strategie.pdf - Time variability (std dev)")
-    print("  10_k_vs_tempo.pdf       - K vs Time correlation")
-    print("  11_dashboard.pdf        - Summary dashboard")
+    print("  10_k_vs_tempo.pdf         - K vs Time correlation")
+    print("  11_dashboard.pdf          - Summary dashboard")
+    print("  12_heatmap_k.pdf          - K heatmap (Strategy x N)")
+    print("  13_boxplot_k.pdf          - K distribution by strategy")
+    print("  14_ranking_k.pdf          - Strategy ranking by avg K")
+    print("  15_violin_k_by_n.pdf      - K distribution per N")
+    print("  16_k_vs_n.pdf             - Average K vs N (line)")
+    print("  17_k_minmaxavg.pdf        - Min/Max/Avg K per strategy")
+    print("  18_k_frequency_heatmap.pdf- K frequency heatmap (Strategy x K)")
+    print("  19_k_range_plot.pdf       - K range plot (Min-Max)")
+    print("  20_k_histograms_top6.pdf  - K histograms for top 6 strategies")
 
 
 def parse_args():
