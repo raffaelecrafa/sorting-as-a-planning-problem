@@ -1,9 +1,0 @@
-==================================================
-BENCHMARK INSTANCE #47
-==================================================
-
-Dimensione Vettore (N): 25
-Vettore Iniziale    : [7, 13, 16, 5, 23, 14, 2, 24, 11, 6, 12, 20, 10, 4, 22, 18, 1, 19, 25, 3, 15, 21, 8, 9, 17]
-
-Stato: FALLITO / TIMEOUT
-Tempo Trascorso: > 300 secondi
